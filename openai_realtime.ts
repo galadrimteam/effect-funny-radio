@@ -68,6 +68,7 @@ ws.on("open", function open() {
               rate: 24000,
             },
             turn_detection: null,
+            noise_reduction: null,
           },
         },
         instructions: systemInstruction,
@@ -81,6 +82,7 @@ ws.on("open", function open() {
     console.log(`[${new Date().toISOString()}] Asking for a new response`);
     ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
     ws.send(JSON.stringify({ type: "response.create" }));
+    ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
   }, audioTreatmentInterval);
 
   const reader = audioStream.getReader();
