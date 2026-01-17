@@ -1,17 +1,12 @@
 const audioUrl =
   "https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8";
 
-const audioTreatmentInterval = 20000; // in milliseconds
+const SUMMARY_INTERVAL = 15000; // in milliseconds
 const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
-const TARGET_BYTES = (audioTreatmentInterval / 1000) * BYTES_PER_SECOND;
-const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 25); // ~40ms of audio
+const TARGET_BYTES = (SUMMARY_INTERVAL / 1000) * BYTES_PER_SECOND;
+const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50); // ~20ms of audio
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-
-// Pre-stringify static messages
-const commitMessage = JSON.stringify({ type: "input_audio_buffer.commit" });
-const createMessage = JSON.stringify({ type: "response.create" });
-const clearMessage = JSON.stringify({ type: "input_audio_buffer.clear" });
 
 const proc = Bun.spawn(
   [
@@ -79,6 +74,10 @@ Transformez l'extrait audio d'actualité en une version courte, drôle et optimi
 Gardez TOUS les faits importants exacts — n'inventez ni ne mentez jamais.
 Rendez-la plus légère, ajoutez des observations pleines d'esprit, un brin de moquerie bienveillante sur la situation ou les politiciens, mais restez respectueux.
 Terminez sur une note pleine d'espoir ou ridiculement positive.`;
+
+const commitMessage = `{"type":"input_audio_buffer.commit"}`;
+const createMessage = `{"type":"response.create"}`;
+const clearMessage = `{"type":"input_audio_buffer.clear"}`;
 
 ws.addEventListener("open", async () => {
   console.log(`[${new Date().toISOString()}] Connected to server.`);
