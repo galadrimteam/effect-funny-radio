@@ -131,4 +131,7 @@ ws.on("message", function incoming(message) {
       console.log(`[${new Date().toISOString()}] Response completed:`, text);
     }
   }
+  if (data.type === "error") {
+    console.error(`[${new Date().toISOString()}] Error:`, data);
+  }
 });
