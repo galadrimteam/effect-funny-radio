@@ -3,12 +3,31 @@ import WebSocket from "ws";
 const audioUrl =
   "https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8";
 
-const audioTreatmentInterval = 5000;
+const audioTreatmentInterval = 20000; // in milliseconds
+const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
+const TARGET_BYTES = (audioTreatmentInterval / 1000) * BYTES_PER_SECOND;
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const proc = Bun.spawn(
-  ["ffmpeg", "-i", audioUrl, "-f", "s16le", "-ar", "24000", "-ac", "1", "-"],
+  [
+    "ffmpeg",
+    "-fflags",
+    "+nobuffer",
+    "-flags",
+    "+low_delay",
+    "-i",
+    audioUrl,
+    "-f",
+    "s16le",
+    "-ar",
+    "24000",
+    "-ac",
+    "1",
+    "-flush_packets",
+    "1",
+    "-",
+  ],
   {
     stdout: "pipe",
     stderr: "pipe",
@@ -52,7 +71,7 @@ Gardez TOUS les faits importants exacts — n'inventez ni ne mentez jamais.
 Rendez-la plus légère, ajoutez des observations pleines d'esprit, un brin de moquerie bienveillante sur la situation ou les politiciens, mais restez respectueux.
 Terminez sur une note pleine d'espoir ou ridiculement positive.`;
 
-ws.on("open", function open() {
+ws.on("open", async function open() {
   console.log(`[${new Date().toISOString()}] Connected to server.`);
 
   // Send client events over the WebSocket once connected
@@ -74,50 +93,55 @@ ws.on("open", function open() {
         instructions: systemInstruction,
         model: "gpt-realtime-mini",
         output_modalities: ["text"],
+        tracing: "auto",
       },
     })
   );
 
-  let activityInterval = setInterval(() => {
-    console.log(`[${new Date().toISOString()}] Asking for a new response`);
-    ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-    ws.send(JSON.stringify({ type: "response.create" }));
-    ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
-  }, audioTreatmentInterval);
-
+  let accumulatedBytes = 0;
   const reader = audioStream.getReader();
-  (async () => {
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        if (!value || value.length === 0) {
-          continue;
-        }
-        const base64Audio = Buffer.from(value).toString("base64");
-        ws.send(
-          JSON.stringify({
-            type: "input_audio_buffer.append",
-            audio: base64Audio,
-          })
-        );
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
       }
-    } catch (error) {
-      console.error(
-        `[${new Date().toISOString()}] Error sending audio chunk to server:`,
-        error
+      if (!value || value.length === 0) {
+        continue;
+      }
+      const base64Audio = Buffer.from(value).toString("base64");
+      ws.send(
+        JSON.stringify({
+          type: "input_audio_buffer.append",
+          audio: base64Audio,
+        })
       );
-    } finally {
-      clearInterval(activityInterval);
-      try {
-        reader.releaseLock();
-      } catch (e) {
-        // Reader might already be released
+
+      accumulatedBytes += value.length;
+
+      if (accumulatedBytes >= TARGET_BYTES) {
+        console.log(
+          `[${new Date().toISOString()}] Asking for a new response (${(accumulatedBytes / BYTES_PER_SECOND).toFixed(2)}s of audio)`
+        );
+        ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+        ws.send(JSON.stringify({ type: "response.create" }));
+        ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+        accumulatedBytes = 0;
       }
     }
-  })();
+  } catch (error) {
+    console.error(
+      `[${new Date().toISOString()}] Error sending audio chunk to server:`,
+      error
+    );
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch (e) {
+      // Reader might already be released
+    }
+  }
 });
 
 // Listen for and parse server events
