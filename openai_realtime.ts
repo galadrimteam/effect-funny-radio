@@ -1,13 +1,17 @@
-import WebSocket from "ws";
-
 const audioUrl =
   "https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8";
 
 const audioTreatmentInterval = 20000; // in milliseconds
 const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
 const TARGET_BYTES = (audioTreatmentInterval / 1000) * BYTES_PER_SECOND;
+const BATCH_THRESHOLD = BYTES_PER_SECOND / 10; // 100ms of audio (4800 bytes)
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// Pre-stringify static messages
+const commitMessage = JSON.stringify({ type: "input_audio_buffer.commit" });
+const createMessage = JSON.stringify({ type: "response.create" });
+const clearMessage = JSON.stringify({ type: "input_audio_buffer.clear" });
 
 const proc = Bun.spawn(
   [
@@ -35,11 +39,12 @@ const proc = Bun.spawn(
 );
 
 // Handle process errors
+const textDecoder = new TextDecoder();
 proc.stderr.pipeTo(
   new WritableStream({
     write(chunk) {
       // Log ffmpeg stderr for debugging, but don't treat as fatal
-      const text = new TextDecoder().decode(chunk);
+      const text = textDecoder.decode(chunk);
       if (text.includes("error") || text.includes("Error")) {
         console.error(`[${new Date().toISOString()}] ffmpeg:`, text);
       }
@@ -71,7 +76,7 @@ Gardez TOUS les faits importants exacts — n'inventez ni ne mentez jamais.
 Rendez-la plus légère, ajoutez des observations pleines d'esprit, un brin de moquerie bienveillante sur la situation ou les politiciens, mais restez respectueux.
 Terminez sur une note pleine d'espoir ou ridiculement positive.`;
 
-ws.on("open", async function open() {
+ws.addEventListener("open", async () => {
   console.log(`[${new Date().toISOString()}] Connected to server.`);
 
   // Send client events over the WebSocket once connected
@@ -99,6 +104,8 @@ ws.on("open", async function open() {
   );
 
   let accumulatedBytes = 0;
+  let audioBuffer: Buffer[] = [];
+  let audioBufferSize = 0;
   const reader = audioStream.getReader();
 
   try {
@@ -110,23 +117,45 @@ ws.on("open", async function open() {
       if (!value || value.length === 0) {
         continue;
       }
-      const base64Audio = Buffer.from(value).toString("base64");
-      ws.send(
-        JSON.stringify({
-          type: "input_audio_buffer.append",
-          audio: base64Audio,
-        })
-      );
 
+      // Batch audio chunks
+      audioBuffer.push(Buffer.from(value));
+      audioBufferSize += value.length;
       accumulatedBytes += value.length;
 
+      // Send batched audio when threshold is reached
+      if (audioBufferSize >= BATCH_THRESHOLD) {
+        const combined = Buffer.concat(audioBuffer);
+        ws.send(
+          JSON.stringify({
+            type: "input_audio_buffer.append",
+            audio: combined.toString("base64"),
+          })
+        );
+        audioBuffer = [];
+        audioBufferSize = 0;
+      }
+
       if (accumulatedBytes >= TARGET_BYTES) {
+        // Flush any remaining audio in buffer
+        if (audioBufferSize > 0) {
+          const combined = Buffer.concat(audioBuffer);
+          ws.send(
+            JSON.stringify({
+              type: "input_audio_buffer.append",
+              audio: combined.toString("base64"),
+            })
+          );
+          audioBuffer = [];
+          audioBufferSize = 0;
+        }
+
         console.log(
           `[${new Date().toISOString()}] Asking for a new response (${(accumulatedBytes / BYTES_PER_SECOND).toFixed(2)}s of audio)`
         );
-        ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
-        ws.send(JSON.stringify({ type: "response.create" }));
-        ws.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+        ws.send(commitMessage);
+        ws.send(createMessage);
+        ws.send(clearMessage);
         accumulatedBytes = 0;
       }
     }
@@ -145,9 +174,8 @@ ws.on("open", async function open() {
 });
 
 // Listen for and parse server events
-ws.on("message", function incoming(message) {
-  // console.log(`[${new Date().toISOString()}]`, JSON.parse(message.toString()));
-  const data = JSON.parse(message.toString());
+ws.addEventListener("message", (event) => {
+  const data = JSON.parse(event.data as string);
   if (data.type === "response.done") {
     const response = data.response;
     if (response.status === "completed") {
