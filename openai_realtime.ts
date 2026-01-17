@@ -187,3 +187,14 @@ ws.addEventListener("message", (event) => {
     console.error(`[${new Date().toISOString()}] Error:`, data);
   }
 });
+
+// Graceful shutdown
+function shutdown() {
+  console.log(`[${new Date().toISOString()}] Shutting down...`);
+  ws.close();
+  proc.kill();
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
