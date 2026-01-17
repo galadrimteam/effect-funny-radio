@@ -1,0 +1,25 @@
+{
+  "name": "effect-funny-radio",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "prettier": "^3.7.4",
+    "@types/ws": "^8.18.1"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@effect/ai": "^0.33.2",
+    "@effect/ai-google": "^0.12.1",
+    "@effect/platform": "^0.94.1",
+    "@effect/platform-bun": "^0.87.0",
+    "@effect/platform-node": "^0.104.0",
+    "@google/genai": "^1.35.0",
+    "effect": "^3.19.14"
+  },
+  "trustedDependencies": [
+    "@parcel/watcher"
+  ]
+}
