@@ -4,7 +4,7 @@ const audioUrl =
 const audioTreatmentInterval = 20000; // in milliseconds
 const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
 const TARGET_BYTES = (audioTreatmentInterval / 1000) * BYTES_PER_SECOND;
-const BATCH_THRESHOLD = BYTES_PER_SECOND / 10; // 100ms of audio (4800 bytes)
+const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 25); // ~40ms of audio
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
@@ -20,6 +20,10 @@ const proc = Bun.spawn(
     "+nobuffer",
     "-flags",
     "+low_delay",
+    "-probesize",
+    "32",
+    "-analyzeduration",
+    "0",
     "-i",
     audioUrl,
     "-f",
@@ -106,7 +110,14 @@ ws.addEventListener("open", async () => {
   let accumulatedBytes = 0;
   let audioBuffer: Buffer[] = [];
   let audioBufferSize = 0;
+  let lastResponseCreateAt = 0;
   const reader = audioStream.getReader();
+
+  const sendAudioAppend = (buffer: Buffer) => {
+    ws.send(
+      `{"type":"input_audio_buffer.append","audio":"${buffer.toString("base64")}"}`
+    );
+  };
 
   try {
     while (true) {
@@ -126,12 +137,7 @@ ws.addEventListener("open", async () => {
       // Send batched audio when threshold is reached
       if (audioBufferSize >= BATCH_THRESHOLD) {
         const combined = Buffer.concat(audioBuffer);
-        ws.send(
-          JSON.stringify({
-            type: "input_audio_buffer.append",
-            audio: combined.toString("base64"),
-          })
-        );
+        sendAudioAppend(combined);
         audioBuffer = [];
         audioBufferSize = 0;
       }
@@ -140,23 +146,24 @@ ws.addEventListener("open", async () => {
         // Flush any remaining audio in buffer
         if (audioBufferSize > 0) {
           const combined = Buffer.concat(audioBuffer);
-          ws.send(
-            JSON.stringify({
-              type: "input_audio_buffer.append",
-              audio: combined.toString("base64"),
-            })
-          );
+          sendAudioAppend(combined);
           audioBuffer = [];
           audioBufferSize = 0;
         }
 
+        const now = Date.now();
+        const intervalSeconds =
+          lastResponseCreateAt > 0
+            ? ((now - lastResponseCreateAt) / 1000).toFixed(2)
+            : "n/a";
         console.log(
-          `[${new Date().toISOString()}] Asking for a new response (${(accumulatedBytes / BYTES_PER_SECOND).toFixed(2)}s of audio)`
+          `[${new Date().toISOString()}] Asking for a new response (${(accumulatedBytes / BYTES_PER_SECOND).toFixed(2)}s of audio, interval ${intervalSeconds}s)`
         );
         ws.send(commitMessage);
         ws.send(createMessage);
         ws.send(clearMessage);
         accumulatedBytes = 0;
+        lastResponseCreateAt = now;
       }
     }
   } catch (error) {
