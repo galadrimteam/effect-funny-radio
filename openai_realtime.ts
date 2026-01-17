@@ -63,7 +63,7 @@ proc.exited.then((code) => {
 
 const audioStream = proc.stdout;
 
-const url = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
+const url = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 const ws = new WebSocket(url, {
   headers: {
     Authorization: "Bearer " + OPENAI_API_KEY,
