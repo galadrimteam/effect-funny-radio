@@ -2,8 +2,10 @@ const audioUrl =
   "https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8";
 
 const SUMMARY_INTERVAL = 15000; // in milliseconds
+const COMMIT_INTERVAL = 3000; // commit every 3 seconds within summary interval
 const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
 const TARGET_BYTES = (SUMMARY_INTERVAL / 1000) * BYTES_PER_SECOND;
+const COMMIT_BYTES = (COMMIT_INTERVAL / 1000) * BYTES_PER_SECOND;
 const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50); // ~20ms of audio
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -77,7 +79,6 @@ Terminez sur une note pleine d'espoir ou ridiculement positive.`;
 
 const commitMessage = `{"type":"input_audio_buffer.commit"}`;
 const createMessage = `{"type":"response.create"}`;
-const clearMessage = `{"type":"input_audio_buffer.clear"}`;
 
 ws.addEventListener("open", async () => {
   console.log(`[${new Date().toISOString()}] Connected to server.`);
@@ -107,6 +108,7 @@ ws.addEventListener("open", async () => {
   );
 
   let accumulatedBytes = 0;
+  let bytesSinceLastCommit = 0;
   let audioBuffer: Buffer[] = [];
   let audioBufferSize = 0;
   let lastResponseCreateAt = 0;
@@ -132,6 +134,7 @@ ws.addEventListener("open", async () => {
       audioBuffer.push(Buffer.from(value));
       audioBufferSize += value.length;
       accumulatedBytes += value.length;
+      bytesSinceLastCommit += value.length;
 
       // Send batched audio when threshold is reached
       if (audioBufferSize >= BATCH_THRESHOLD) {
@@ -139,6 +142,19 @@ ws.addEventListener("open", async () => {
         sendAudioAppend(combined);
         audioBuffer = [];
         audioBufferSize = 0;
+      }
+
+      // Send commit message periodically within summary interval
+      if (bytesSinceLastCommit >= COMMIT_BYTES && accumulatedBytes < TARGET_BYTES) {
+        // Flush any remaining audio in buffer before committing
+        if (audioBufferSize > 0) {
+          const combined = Buffer.concat(audioBuffer);
+          sendAudioAppend(combined);
+          audioBuffer = [];
+          audioBufferSize = 0;
+        }
+        ws.send(commitMessage);
+        bytesSinceLastCommit = 0;
       }
 
       if (accumulatedBytes >= TARGET_BYTES) {
@@ -160,8 +176,8 @@ ws.addEventListener("open", async () => {
         );
         ws.send(commitMessage);
         ws.send(createMessage);
-        ws.send(clearMessage);
         accumulatedBytes = 0;
+        bytesSinceLastCommit = 0;
         lastResponseCreateAt = now;
       }
     }
