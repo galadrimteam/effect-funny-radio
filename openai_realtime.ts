@@ -13,25 +13,19 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const proc = Bun.spawn(
   [
     "ffmpeg",
-    "-fflags",
-    "+nobuffer",
-    "-flags",
-    "+low_delay",
-    "-probesize",
-    "32",
-    "-analyzeduration",
-    "0",
-    "-i",
-    audioUrl,
-    "-f",
-    "s16le",
-    "-ar",
-    "24000",
-    "-ac",
-    "1",
-    "-flush_packets",
-    "1",
-    "-",
+    // Low-latency input options
+    "-fflags", "+nobuffer",       // Reduce input buffering
+    "-flags", "+low_delay",       // Enable low-delay decoding
+    "-probesize", "32",           // Minimal stream probing (bytes)
+    "-analyzeduration", "0",      // Skip duration analysis
+    // Input
+    "-i", audioUrl,
+    // Output format (OpenAI Realtime API requirements)
+    "-f", "s16le",                // Raw PCM, signed 16-bit little-endian
+    "-ar", "24000",               // 24kHz sample rate
+    "-ac", "1",                   // Mono
+    "-flush_packets", "1",        // Flush output packets immediately
+    "-",                          // Output to stdout
   ],
   {
     stdout: "pipe",
