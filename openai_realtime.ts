@@ -1,11 +1,11 @@
 const audioUrl =
   "https://stream.radiofrance.fr/franceinfo/franceinfo_hifi.m3u8";
 
-const SUMMARY_INTERVAL = 15000; // in milliseconds
-const COMMIT_INTERVAL = 3000; // commit every 3 seconds within summary interval
+const SUMMARY_INTERVAL = 15; // in seconds
+const COMMIT_INTERVAL = 3; // commit every 3 seconds within summary interval
 const BYTES_PER_SECOND = 24000 * 2; // 24kHz, 16-bit (2 bytes per sample), mono
-const TARGET_BYTES = (SUMMARY_INTERVAL / 1000) * BYTES_PER_SECOND;
-const COMMIT_BYTES = (COMMIT_INTERVAL / 1000) * BYTES_PER_SECOND;
+const TARGET_BYTES = SUMMARY_INTERVAL * BYTES_PER_SECOND;
+const COMMIT_BYTES = COMMIT_INTERVAL * BYTES_PER_SECOND;
 const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50); // ~20ms of audio
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
