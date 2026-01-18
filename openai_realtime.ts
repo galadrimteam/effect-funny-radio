@@ -14,18 +14,27 @@ const proc = Bun.spawn(
   [
     "ffmpeg",
     // Low-latency input options
-    "-fflags", "+nobuffer",       // Reduce input buffering
-    "-flags", "+low_delay",       // Enable low-delay decoding
-    "-probesize", "32",           // Minimal stream probing (bytes)
-    "-analyzeduration", "0",      // Skip duration analysis
+    "-fflags",
+    "+nobuffer", // Reduce input buffering
+    "-flags",
+    "+low_delay", // Enable low-delay decoding
+    "-probesize",
+    "32", // Minimal stream probing (bytes)
+    "-analyzeduration",
+    "0", // Skip duration analysis
     // Input
-    "-i", audioUrl,
+    "-i",
+    audioUrl,
     // Output format (OpenAI Realtime API requirements)
-    "-f", "s16le",                // Raw PCM, signed 16-bit little-endian
-    "-ar", "24000",               // 24kHz sample rate
-    "-ac", "1",                   // Mono
-    "-flush_packets", "1",        // Flush output packets immediately
-    "-",                          // Output to stdout
+    "-f",
+    "s16le", // Raw PCM, signed 16-bit little-endian
+    "-ar",
+    "24000", // 24kHz sample rate
+    "-ac",
+    "1", // Mono
+    "-flush_packets",
+    "1", // Flush output packets immediately
+    "-", // Output to stdout
   ],
   {
     stdout: "pipe",
@@ -139,7 +148,10 @@ ws.addEventListener("open", async () => {
       }
 
       // Send commit message periodically within summary interval
-      if (bytesSinceLastCommit >= COMMIT_BYTES && accumulatedBytes < TARGET_BYTES) {
+      if (
+        bytesSinceLastCommit >= COMMIT_BYTES &&
+        accumulatedBytes < TARGET_BYTES
+      ) {
         // Flush any remaining audio in buffer before committing
         if (audioBufferSize > 0) {
           const combined = Buffer.concat(audioBuffer);
