@@ -179,18 +179,61 @@ ws.addEventListener("open", async () => {
   }
 });
 
+let activeResponseId: string | null = null;
+
+const asString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
+
+const startResponseStream = (responseId: string) => {
+  if (activeResponseId) {
+    process.stdout.write("\n");
+  }
+  process.stdout.write(
+    `[${new Date().toISOString()}] Response ${responseId}: `
+  );
+  activeResponseId = responseId;
+};
+
 // Listen for and parse server events
 ws.addEventListener("message", (event) => {
   const data = JSON.parse(event.data as string);
-  if (data.type === "response.done") {
-    const response = data.response;
-    if (response.status === "completed") {
-      const text = response.output[0].content[0].text;
-      console.log(`[${new Date().toISOString()}] Response completed:`, text);
+  switch (data.type) {
+    case "response.output_text.delta": {
+      const delta = data.delta;
+      const responseId = asString(data.response_id);
+      if (!activeResponseId) {
+        if (!responseId) {
+          break;
+        }
+        startResponseStream(responseId);
+      } else if (responseId && responseId !== activeResponseId) {
+        startResponseStream(responseId);
+      }
+      if (isNonEmptyString(delta)) {
+        process.stdout.write(delta);
+      }
+      break;
     }
-  }
-  if (data.type === "error") {
-    console.error(`[${new Date().toISOString()}] Error:`, data);
+    case "response.done": {
+      const response = data.response;
+      const responseId = asString(response?.id) ?? asString(data.response_id);
+      if (activeResponseId) {
+        process.stdout.write("\n");
+      }
+      console.log(
+        `[${new Date().toISOString()}] ${responseId ? `Response ${responseId}` : "Response"} done (${response?.status ?? "unknown"})`
+      );
+      activeResponseId = null;
+      break;
+    }
+    case "error":
+      console.error(`[${new Date().toISOString()}] Error:`, data);
+      break;
+    default:
+      break;
   }
 });
 
