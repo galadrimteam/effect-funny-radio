@@ -30,7 +30,7 @@ Terminez sur une note pleine d'espoir ou ridiculement positive.`
 // OpenAI Realtime Server Events (only fields we use)
 type ServerEvent =
   | { type: "response.output_text.delta"; response_id: string; delta: string }
-  | { type: "response.done"; response: { status: string } }
+  | { type: "response.done"; response: { id: string; status: string } }
   | { type: "error"; error: { message: string } }
   | { type: string }
 
@@ -113,13 +113,13 @@ const program = Effect.gen(function* () {
         const currentResponseId = yield* Ref.get(activeResponseId)
         if (currentResponseId !== msg.response_id) {
           if (currentResponseId) yield* terminal.display("\n")
-          yield* terminal.display(`Response ${msg.response_id}: `)
+          yield* Effect.log(`Response ${msg.response_id} started`)
           yield* Ref.set(activeResponseId, msg.response_id)
         }
         yield* terminal.display(msg.delta)
       } else if (msg.type === "response.done" && "response" in msg) {
         yield* terminal.display("\n")
-        yield* Effect.log(`Response done (${msg.response.status})`)
+        yield* Effect.log(`Response ${msg.response.id} done (${msg.response.status})`)
         yield* Ref.set(activeResponseId, null)
       } else if (msg.type === "error" && "error" in msg) {
         yield* Effect.logError(`OpenAI error: ${msg.error.message}`)
