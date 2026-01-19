@@ -4,10 +4,12 @@ import {
   Config,
   Data,
   Effect,
+  Match,
   Option,
   Queue,
   Ref,
   Redacted,
+  Schedule,
   Stream,
   Layer,
 } from "effect";
@@ -31,9 +33,7 @@ Terminez sur une note pleine d'espoir ou ridiculement positive.`;
 type ServerEvent =
   | { type: "response.output_text.delta"; response_id: string; delta: string }
   | { type: "response.done"; response: { id: string; status: string } }
-  | { type: "error"; error: { message: string } }
-  | { type: string };
-
+  | { type: "error"; error: { message: string } };
 class WebSocketError extends Data.TaggedError("WebSocketError")<{
   cause: unknown;
 }> {}
@@ -45,8 +45,8 @@ class OpenAIWebSocket extends Effect.Service<OpenAIWebSocket>()(
       const apiKey = yield* Config.redacted("OPENAI_API_KEY");
       const queue = yield* Queue.unbounded<ServerEvent>();
 
-      const ws = yield* Effect.acquireRelease(
-        Effect.async<WebSocket, WebSocketError>((resume) => {
+      const connectWithRetry = Effect.async<WebSocket, WebSocketError>(
+        (resume) => {
           const ws = new WebSocket(OPENAI_URL, {
             headers: { Authorization: `Bearer ${Redacted.value(apiKey)}` },
           });
@@ -54,8 +54,20 @@ class OpenAIWebSocket extends Effect.Service<OpenAIWebSocket>()(
           ws.addEventListener("error", (e) =>
             resume(Effect.fail(new WebSocketError({ cause: e })))
           );
-        }),
-        (ws) => Effect.sync(() => ws.close())
+        }
+      ).pipe(
+        Effect.retry(
+          Schedule.exponential("1 second").pipe(
+            Schedule.compose(Schedule.recurs(5)),
+            Schedule.tapOutput((duration) =>
+              Effect.log(`WebSocket connection failed, retrying in ${duration}`)
+            )
+          )
+        )
+      );
+
+      const ws = yield* Effect.acquireRelease(connectWithRetry, (ws) =>
+        Effect.sync(() => ws.close())
       );
 
       ws.addEventListener("message", (e) => {
@@ -135,29 +147,34 @@ const program = Effect.gen(function* () {
     })
   );
 
-  yield* Effect.fork(
-    Stream.runForEach(ws.messages, (msg) =>
+  const handleMessage = Match.type<ServerEvent>().pipe(
+    Match.when({ type: "response.output_text.delta" }, (msg) =>
       Effect.gen(function* () {
-        if (msg.type === "response.output_text.delta" && "delta" in msg) {
-          const currentResponseId = yield* Ref.get(activeResponseId);
-          if (currentResponseId !== msg.response_id) {
-            if (currentResponseId) yield* terminal.display("\n");
-            yield* Effect.log(`Response ${msg.response_id} started`);
-            yield* Ref.set(activeResponseId, msg.response_id);
-          }
-          yield* terminal.display(msg.delta);
-        } else if (msg.type === "response.done" && "response" in msg) {
-          yield* terminal.display("\n");
-          yield* Effect.log(
-            `Response ${msg.response.id} done (${msg.response.status})`
-          );
-          yield* Ref.set(activeResponseId, null);
-        } else if (msg.type === "error" && "error" in msg) {
-          yield* Effect.logError(`OpenAI error: ${msg.error.message}`);
+        const currentResponseId = yield* Ref.get(activeResponseId);
+        if (currentResponseId !== msg.response_id) {
+          if (currentResponseId) yield* terminal.display("\n");
+          yield* Effect.log(`Response ${msg.response_id} started`);
+          yield* Ref.set(activeResponseId, msg.response_id);
         }
+        yield* terminal.display(msg.delta);
       })
-    )
+    ),
+    Match.when({ type: "response.done" }, (msg) =>
+      Effect.gen(function* () {
+        yield* terminal.display("\n");
+        yield* Effect.log(
+          `Response ${msg.response.id} done (${msg.response.status})`
+        );
+        yield* Ref.set(activeResponseId, null);
+      })
+    ),
+    Match.when({ type: "error" }, (msg) =>
+      Effect.logError(`OpenAI error: ${msg.error.message}`)
+    ),
+    Match.orElse(() => Effect.void)
   );
+
+  yield* Effect.fork(Stream.runForEach(ws.messages, handleMessage));
 
   yield* Effect.log("Starting audio stream...");
 
