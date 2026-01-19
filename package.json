@@ -2,6 +2,9 @@
   "name": "effect-funny-radio",
   "type": "module",
   "private": true,
+  "scripts": {
+    "format": "prettier --write ."
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "prettier": "^3.7.4",
