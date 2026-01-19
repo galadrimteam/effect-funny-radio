@@ -2,10 +2,8 @@ import { Command, Terminal } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import {
   Config,
-  Context,
   Data,
   Effect,
-  Layer,
   Option,
   Queue,
   Ref,
@@ -39,45 +37,39 @@ class WebSocketError extends Data.TaggedError("WebSocketError")<{
   cause: unknown;
 }> {}
 
-class OpenAIWebSocket extends Context.Tag("OpenAIWebSocket")<
-  OpenAIWebSocket,
+class OpenAIWebSocket extends Effect.Service<OpenAIWebSocket>()(
+  "OpenAIWebSocket",
   {
-    send: (msg: string) => Effect.Effect<void>;
-    messages: Stream.Stream<ServerEvent>;
+    scoped: Effect.gen(function* () {
+      const apiKey = yield* Config.redacted("OPENAI_API_KEY");
+      const queue = yield* Queue.unbounded<ServerEvent>();
+
+      const ws = yield* Effect.acquireRelease(
+        Effect.async<WebSocket, WebSocketError>((resume) => {
+          const ws = new WebSocket(OPENAI_URL, {
+            headers: { Authorization: `Bearer ${Redacted.value(apiKey)}` },
+          });
+          ws.addEventListener("open", () => resume(Effect.succeed(ws)));
+          ws.addEventListener("error", (e) =>
+            resume(Effect.fail(new WebSocketError({ cause: e })))
+          );
+        }),
+        (ws) => Effect.sync(() => ws.close())
+      );
+
+      ws.addEventListener("message", (e) => {
+        try {
+          Queue.unsafeOffer(queue, JSON.parse(e.data as string));
+        } catch {}
+      });
+
+      return {
+        send: (msg: string) => Effect.sync(() => ws.send(msg)),
+        messages: Stream.fromQueue(queue),
+      };
+    }),
   }
->() {}
-
-const OpenAIWebSocketLive = Layer.scoped(
-  OpenAIWebSocket,
-  Effect.gen(function* () {
-    const apiKey = yield* Config.redacted("OPENAI_API_KEY");
-    const queue = yield* Queue.unbounded<ServerEvent>();
-
-    const ws = yield* Effect.acquireRelease(
-      Effect.async<WebSocket, WebSocketError>((resume) => {
-        const ws = new WebSocket(OPENAI_URL, {
-          headers: { Authorization: `Bearer ${Redacted.value(apiKey)}` },
-        });
-        ws.addEventListener("open", () => resume(Effect.succeed(ws)));
-        ws.addEventListener("error", (e) =>
-          resume(Effect.fail(new WebSocketError({ cause: e })))
-        );
-      }),
-      (ws) => Effect.sync(() => ws.close())
-    );
-
-    ws.addEventListener("message", (e) => {
-      try {
-        Queue.unsafeOffer(queue, JSON.parse(e.data as string));
-      } catch {}
-    });
-
-    return {
-      send: (msg: string) => Effect.sync(() => ws.send(msg)),
-      messages: Stream.fromQueue(queue),
-    };
-  })
-);
+) {}
 
 const audioStream = Command.make(
   "ffmpeg",
@@ -204,6 +196,7 @@ const program = Effect.gen(function* () {
 
 BunRuntime.runMain(
   program.pipe(
-    Effect.provide(Layer.mergeAll(OpenAIWebSocketLive, BunContext.layer))
+    Effect.provide(OpenAIWebSocket.Default),
+    Effect.provide(BunContext.layer)
   )
 );
