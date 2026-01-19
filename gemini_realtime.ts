@@ -116,9 +116,11 @@ const reader = audioStream.getReader();
       // value is raw 16-bit PCM (2 bytes per sample), 16kHz, mono
       // Each sample is 2 bytes (16-bit), so chunk length should be even
       if (value.length % 2 !== 0) {
-        console.warn(`Audio chunk length is odd (${value.length} bytes), expected even for 16-bit samples`);
+        console.warn(
+          `Audio chunk length is odd (${value.length} bytes), expected even for 16-bit samples`
+        );
       }
-      
+
       const base64Audio = Buffer.from(value).toString("base64");
 
       // Send audio chunk
