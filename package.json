@@ -6,9 +6,10 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
+    "@effect/language-service": "^0.69.2",
     "@types/bun": "latest",
-    "prettier": "^3.7.4",
-    "@types/ws": "^8.18.1"
+    "@types/ws": "^8.18.1",
+    "prettier": "^3.7.4"
   },
   "peerDependencies": {
     "typescript": "^5"
