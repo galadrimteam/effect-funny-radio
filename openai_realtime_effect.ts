@@ -67,7 +67,9 @@ class OpenAIWebSocket extends Effect.Service<OpenAIWebSocket>()(
       );
 
       const ws = yield* Effect.acquireRelease(connectWithRetry, (ws) =>
-        Effect.sync(() => ws.close())
+        Effect.sync(() => ws.close()).pipe(
+          Effect.tap(() => Queue.shutdown(queue))
+        )
       );
 
       ws.addEventListener("message", (e) => {
