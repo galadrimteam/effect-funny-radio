@@ -9,6 +9,7 @@ import {
   Ref,
   Redacted,
   Stream,
+  Layer,
 } from "effect";
 
 // Constants
@@ -194,9 +195,6 @@ const program = Effect.gen(function* () {
   );
 });
 
-BunRuntime.runMain(
-  program.pipe(
-    Effect.provide(OpenAIWebSocket.Default),
-    Effect.provide(BunContext.layer)
-  )
-);
+const layers = Layer.mergeAll(OpenAIWebSocket.Default, BunContext.layer);
+
+BunRuntime.runMain(program.pipe(Effect.provide(layers)));
