@@ -3,7 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "format": "prettier --write ."
+    "format": "prettier --write ./*.ts"
   },
   "devDependencies": {
     "@effect/language-service": "^0.69.2",
