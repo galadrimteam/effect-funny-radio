@@ -1,4 +1,8 @@
-import { Command } from "@effect/platform";
+import {
+  Command,
+  CommandExecutor,
+  Error as PlatformError,
+} from "@effect/platform";
 import { Context, Effect, Layer, Option, Ref, Stream } from "effect";
 
 // Audio source configurations
@@ -30,7 +34,11 @@ export class AudioSource extends Context.Tag("AudioSource")<
     readonly currentSource: Effect.Effect<Option.Option<AudioSourceId>>;
     readonly setSource: (id: AudioSourceId) => Effect.Effect<void>;
     readonly clearSource: Effect.Effect<void>;
-    readonly getStream: () => Stream.Stream<Buffer, Error>;
+    readonly getStream: () => Stream.Stream<
+      Buffer,
+      PlatformError.PlatformError,
+      CommandExecutor.CommandExecutor
+    >;
   }
 >() {}
 
@@ -99,6 +107,6 @@ export const AudioSourceLive = Layer.effect(
             });
           })
         ),
-    };
+    } as const;
   })
 );

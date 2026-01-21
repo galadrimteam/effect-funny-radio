@@ -14,7 +14,7 @@ import {
   AUDIO_SOURCES,
   type AudioSourceId,
 } from "./AudioSource.js";
-import { BroadcastMessage, OpenAIRealtime } from "./OpenAIRealtime.js";
+import { type BroadcastMessage, OpenAIRealtime } from "./OpenAIRealtime.js";
 
 // Schema for audio source selection
 const AudioSourceIdSchema = Schema.Literal(
@@ -181,10 +181,7 @@ const streamGroupLive = HttpApiBuilder.group(
 
         // Check if a source is selected
         if (Option.isNone(maybeCurrent)) {
-          return yield* new HttpApiError.ServiceUnavailable({
-            message:
-              "No audio source selected. Use POST /sources to select one.",
-          });
+          return yield* new HttpApiError.ServiceUnavailable();
         }
 
         const openai = yield* OpenAIRealtime;
