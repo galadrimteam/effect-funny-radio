@@ -5,7 +5,6 @@ import {
 } from "@effect/platform";
 import { Context, Effect, Layer, Option, Ref, Stream } from "effect";
 
-// Audio source configurations
 export const AUDIO_SOURCES = {
   franceinfo: {
     name: "France Info",
@@ -23,17 +22,14 @@ export const AUDIO_SOURCES = {
 
 export type AudioSourceId = keyof typeof AUDIO_SOURCES;
 
-// Audio processing constants
 export const BYTES_PER_SECOND = 24000 * 2;
-export const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50);
+const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50);
 
-// Service interface
 export class AudioSource extends Context.Tag("AudioSource")<
   AudioSource,
   {
     readonly currentSource: Effect.Effect<Option.Option<AudioSourceId>>;
     readonly setSource: (id: AudioSourceId) => Effect.Effect<void>;
-    readonly clearSource: Effect.Effect<void>;
     readonly getStream: () => Stream.Stream<
       Buffer,
       PlatformError.PlatformError,
@@ -42,7 +38,6 @@ export class AudioSource extends Context.Tag("AudioSource")<
   }
 >() {}
 
-// Batch audio bytes for efficient processing
 const batchByBytes = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
   stream.pipe(
     Stream.mapAccum({ buf: [] as Uint8Array[], size: 0 }, (s, chunk) => {
@@ -54,7 +49,6 @@ const batchByBytes = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
     Stream.filterMap((x) => x)
   );
 
-// Create ffmpeg command for audio streaming
 const createAudioStream = (url: string) =>
   Command.make(
     "ffmpeg",
@@ -89,23 +83,21 @@ export const AudioSourceLive = Layer.effect(
     return {
       currentSource: Ref.get(sourceRef),
       setSource: (id: AudioSourceId) => Ref.set(sourceRef, Option.some(id)),
-      clearSource: Ref.set(sourceRef, Option.none()),
       getStream: () =>
         Stream.unwrap(
-          Effect.gen(function* () {
-            const maybeSourceId = yield* Ref.get(sourceRef);
-            return Option.match(maybeSourceId, {
-              onNone: () => Stream.empty,
-              onSome: (sourceId) => {
-                const url = AUDIO_SOURCES[sourceId].url;
-                return Stream.fromEffect(
-                  Effect.log(
-                    `Starting audio stream from ${AUDIO_SOURCES[sourceId].name}`
-                  )
-                ).pipe(Stream.flatMap(() => createAudioStream(url)));
-              },
-            });
-          })
+          Ref.get(sourceRef).pipe(
+            Effect.map((maybeSourceId) =>
+              Option.match(maybeSourceId, {
+                onNone: () => Stream.empty,
+                onSome: (sourceId) => {
+                  const source = AUDIO_SOURCES[sourceId];
+                  return Stream.fromEffect(
+                    Effect.log(`Starting audio stream from ${source.name}`)
+                  ).pipe(Stream.flatMap(() => createAudioStream(source.url)));
+                },
+              })
+            )
+          )
         ),
     } as const;
   })
