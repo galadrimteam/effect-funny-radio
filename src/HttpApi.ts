@@ -44,17 +44,13 @@ const AudioSourcesResponse = Schema.Struct({
   current: Schema.NullOr(AudioSourceIdSchema).annotations({
     description: "Currently selected source, or null if none selected",
   }),
-}).annotations({
-  title: "Audio Sources Response",
-});
+}).annotations({ title: "Audio Sources Response" });
 
 const SetSourceRequest = Schema.Struct({
   source: AudioSourceIdSchema.annotations({
     description: "The audio source to select",
   }),
-}).annotations({
-  title: "Set Source Request",
-});
+}).annotations({ title: "Set Source Request" });
 
 const SetSourceResponse = Schema.Struct({
   success: Schema.Boolean,
@@ -62,12 +58,19 @@ const SetSourceResponse = Schema.Struct({
   name: Schema.String.annotations({
     description: "Name of the selected source",
   }),
-}).annotations({
-  title: "Set Source Response",
-});
+}).annotations({ title: "Set Source Response" });
 
-// Define the API with OpenAPI metadata
+// Define the API
 export class FunnyRadioApi extends HttpApi.make("funnyRadioApi")
+  .add(
+    HttpApiGroup.make("ui").add(
+      HttpApiEndpoint.get("getIndex", "/").addSuccess(
+        Schema.String.pipe(
+          HttpApiSchema.withEncoding({ kind: "Text", contentType: "text/html" })
+        )
+      )
+    )
+  )
   .add(
     HttpApiGroup.make("sources")
       .annotate(OpenApi.Title, "Audio Sources")
@@ -78,20 +81,12 @@ export class FunnyRadioApi extends HttpApi.make("funnyRadioApi")
       .add(
         HttpApiEndpoint.get("getSources", "/sources")
           .annotate(OpenApi.Summary, "List available audio sources")
-          .annotate(
-            OpenApi.Description,
-            "Returns all available French radio stations and the currently selected source"
-          )
           .addSuccess(AudioSourcesResponse)
           .addError(HttpApiError.InternalServerError)
       )
       .add(
         HttpApiEndpoint.post("setSource", "/sources")
           .annotate(OpenApi.Summary, "Set the audio source")
-          .annotate(
-            OpenApi.Description,
-            "Select a French radio station to transform into sarcastic messages. This will start the audio processing pipeline."
-          )
           .addSuccess(SetSourceResponse)
           .setPayload(SetSourceRequest)
           .addError(HttpApiError.InternalServerError)
@@ -107,10 +102,6 @@ export class FunnyRadioApi extends HttpApi.make("funnyRadioApi")
       .add(
         HttpApiEndpoint.get("getStream", "/stream")
           .annotate(OpenApi.Summary, "Subscribe to sarcastic messages")
-          .annotate(
-            OpenApi.Description,
-            "Returns a Server-Sent Events stream with real-time sarcastic transformations of the selected radio news. Requires an audio source to be selected first."
-          )
           .addSuccess(
             Schema.String.pipe(
               HttpApiSchema.withEncoding({
@@ -130,13 +121,22 @@ export class FunnyRadioApi extends HttpApi.make("funnyRadioApi")
   )
   .annotate(OpenApi.Version, "1.0.0") {}
 
-// Format SSE message
-const formatSSE = (msg: BroadcastMessage): string => {
-  const data = JSON.stringify(msg);
-  return `data: ${data}\n\n`;
-};
+const formatSSE = (msg: BroadcastMessage): string =>
+  `data: ${JSON.stringify(msg)}\n\n`;
 
-// Implement the sources group
+// UI group - serves HTML page
+const uiGroupLive = HttpApiBuilder.group(FunnyRadioApi, "ui", (handlers) =>
+  handlers.handleRaw("getIndex", () =>
+    Effect.gen(function* () {
+      const html = yield* Effect.promise(() =>
+        Bun.file(import.meta.dir + "/index.html").text()
+      );
+      return HttpServerResponse.text(html, { contentType: "text/html" });
+    })
+  )
+);
+
+// Sources group
 const sourcesGroupLive = HttpApiBuilder.group(
   FunnyRadioApi,
   "sources",
@@ -146,13 +146,11 @@ const sourcesGroupLive = HttpApiBuilder.group(
         Effect.gen(function* () {
           const audioSource = yield* AudioSource;
           const maybeCurrent = yield* audioSource.currentSource;
-
           const sources = Object.entries(AUDIO_SOURCES).map(([id, info]) => ({
             id: id as AudioSourceId,
             name: info.name,
             url: info.url,
           }));
-
           return { sources, current: Option.getOrNull(maybeCurrent) };
         })
       )
@@ -161,15 +159,13 @@ const sourcesGroupLive = HttpApiBuilder.group(
           const audioSource = yield* AudioSource;
           yield* audioSource.setSource(payload.source);
           const name = AUDIO_SOURCES[payload.source].name;
-
           yield* Effect.log(`Audio source changed to: ${name}`);
-
           return { success: true, current: payload.source, name };
         })
       )
 );
 
-// Implement the stream group
+// Stream group
 const streamGroupLive = HttpApiBuilder.group(
   FunnyRadioApi,
   "stream",
@@ -179,7 +175,6 @@ const streamGroupLive = HttpApiBuilder.group(
         const audioSource = yield* AudioSource;
         const maybeCurrent = yield* audioSource.currentSource;
 
-        // Check if a source is selected
         if (Option.isNone(maybeCurrent)) {
           return yield* new HttpApiError.ServiceUnavailable();
         }
@@ -199,12 +194,17 @@ const streamGroupLive = HttpApiBuilder.group(
             Connection: "keep-alive",
           },
         });
-      })
+      }).pipe(
+        Effect.catchTag(
+          "WebSocketError",
+          () => new HttpApiError.ServiceUnavailable()
+        )
+      )
     )
 );
 
-// Combine API implementation
 export const FunnyRadioApiLive = HttpApiBuilder.api(FunnyRadioApi).pipe(
+  Layer.provide(uiGroupLive),
   Layer.provide(sourcesGroupLive),
   Layer.provide(streamGroupLive)
 );

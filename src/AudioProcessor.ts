@@ -1,16 +1,20 @@
-import { Effect, Option, Ref, Schedule, Stream } from "effect";
+import { Effect, Either, Option, Ref, Schedule, Stream, Schema } from "effect";
 import { AudioSource, BYTES_PER_SECOND } from "./AudioSource.js";
 import { OpenAIRealtime } from "./OpenAIRealtime.js";
 
 const TARGET_BYTES = 15 * BYTES_PER_SECOND;
 const COMMIT_BYTES = 3 * BYTES_PER_SECOND;
 
+export class NoSourceError extends Schema.TaggedError<NoSourceError>()(
+  "NoSourceError",
+  {}
+) {}
+
 export class AudioProcessor extends Effect.Service<AudioProcessor>()(
   "AudioProcessor",
   {
     effect: Effect.gen(function* () {
       const audioSource = yield* AudioSource;
-      const openai = yield* OpenAIRealtime;
 
       const run = Effect.gen(function* () {
         yield* Effect.log(
@@ -19,17 +23,15 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
 
         // Wait until a source is selected
         yield* audioSource.currentSource.pipe(
-          Effect.flatMap((opt) =>
-            Option.match(opt, {
-              onNone: () => Effect.fail("no source" as const),
-              onSome: Effect.succeed,
-            })
-          ),
+          Effect.flatMap(Either.fromOption(() => new NoSourceError())),
           Effect.retry(Schedule.spaced("1 second")),
           Effect.tap((id) =>
             Effect.log(`Source selected: ${id}, starting processing...`)
           )
         );
+
+        // Only connect to OpenAI after source is selected
+        const openai = yield* OpenAIRealtime;
 
         const accumulatedBytes = yield* Ref.make(0);
         const bytesSinceLastCommit = yield* Ref.make(0);

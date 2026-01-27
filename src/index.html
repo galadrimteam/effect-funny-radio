@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Funny Radio</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+        background: #1a1a2e;
+        color: #eee;
+        min-height: 100vh;
+      }
+      h1 {
+        color: #f39c12;
+        margin-bottom: 0.5rem;
+      }
+      .subtitle {
+        color: #888;
+        margin-bottom: 2rem;
+      }
+      .section {
+        margin-bottom: 2rem;
+      }
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #aaa;
+      }
+      select,
+      button {
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 6px;
+      }
+      select {
+        background: #2d2d44;
+        color: #eee;
+        width: 100%;
+        max-width: 300px;
+        cursor: pointer;
+      }
+      button {
+        background: #f39c12;
+        color: #1a1a2e;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:hover {
+        background: #e67e22;
+      }
+      button:disabled {
+        background: #555;
+        cursor: not-allowed;
+      }
+      .status {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+      }
+      .status.connected {
+        background: #27ae60;
+      }
+      .status.disconnected {
+        background: #c0392b;
+      }
+      .status.waiting {
+        background: #f39c12;
+        color: #1a1a2e;
+      }
+      #messages {
+        background: #2d2d44;
+        border-radius: 8px;
+        padding: 1rem;
+        min-height: 300px;
+        max-height: 500px;
+        overflow-y: auto;
+      }
+      .message {
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background: #1a1a2e;
+        border-radius: 6px;
+        border-left: 3px solid #f39c12;
+        animation: fadeIn 0.3s ease;
+      }
+      .message.complete {
+        border-left-color: #27ae60;
+      }
+      .message.error {
+        border-left-color: #c0392b;
+      }
+      .message-meta {
+        font-size: 0.75rem;
+        color: #666;
+        margin-top: 0.5rem;
+      }
+      .current-message {
+        white-space: pre-wrap;
+        line-height: 1.6;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .audio-player {
+        background: #2d2d44;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+      .audio-player button {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        padding: 0;
+      }
+      .audio-info {
+        flex: 1;
+      }
+      .audio-info .station {
+        font-weight: 600;
+        color: #f39c12;
+      }
+      .audio-info .status-text {
+        font-size: 0.875rem;
+        color: #888;
+      }
+      .volume-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .volume-control input[type="range"] {
+        width: 80px;
+        accent-color: #f39c12;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Funny Radio</h1>
+    <p class="subtitle">
+      Transform French radio news into sarcastic, optimistic summaries
+    </p>
+
+    <div class="section">
+      <label>Audio Source</label>
+      <div class="controls">
+        <select id="sourceSelect">
+          <option value="">-- Select a station --</option>
+        </select>
+        <button id="startBtn" disabled>Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <span id="status" class="status disconnected">Disconnected</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <label>Live Radio</label>
+      <div class="audio-player">
+        <button id="audioToggle" disabled>&#9654;</button>
+        <div class="audio-info">
+          <div class="station" id="stationName">No station selected</div>
+          <div class="status-text" id="audioStatus">
+            Select a station to listen
+          </div>
+        </div>
+        <div class="volume-control">
+          <span>&#128264;</span>
+          <input type="range" id="volume" min="0" max="100" value="50" />
+        </div>
+      </div>
+      <audio id="audioPlayer" crossorigin="anonymous"></audio>
+    </div>
+
+    <div class="section">
+      <label>Sarcastic Messages</label>
+      <div id="messages">
+        <p style="color: #666; text-align: center; margin-top: 100px">
+          Select a radio station and click "Start" to begin
+        </p>
+      </div>
+    </div>
+
+    <script>
+      const sourceSelect = document.getElementById("sourceSelect");
+      const startBtn = document.getElementById("startBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const statusEl = document.getElementById("status");
+      const messagesEl = document.getElementById("messages");
+      const audioPlayer = document.getElementById("audioPlayer");
+      const audioToggle = document.getElementById("audioToggle");
+      const stationName = document.getElementById("stationName");
+      const audioStatus = document.getElementById("audioStatus");
+      const volumeControl = document.getElementById("volume");
+
+      let eventSource = null;
+      let currentMessageEl = null;
+      let currentResponseId = null;
+      let sources = {};
+      let isPlaying = false;
+
+      function setStatus(status, text) {
+        statusEl.className = `status ${status}`;
+        statusEl.textContent = text;
+      }
+
+      async function loadSources() {
+        const res = await fetch("/sources");
+        const data = await res.json();
+
+        sourceSelect.innerHTML =
+          '<option value="">-- Select a station --</option>';
+        data.sources.forEach((s) => {
+          sources[s.id] = s;
+          const opt = document.createElement("option");
+          opt.value = s.id;
+          opt.textContent = s.name;
+          if (s.id === data.current) opt.selected = true;
+          sourceSelect.appendChild(opt);
+        });
+
+        if (data.current) {
+          startBtn.disabled = false;
+          updateAudioSource(data.current);
+        }
+      }
+
+      function updateAudioSource(sourceId) {
+        if (!sourceId || !sources[sourceId]) {
+          stationName.textContent = "No station selected";
+          audioStatus.textContent = "Select a station to listen";
+          audioToggle.disabled = true;
+          return;
+        }
+
+        const source = sources[sourceId];
+        stationName.textContent = source.name;
+        audioStatus.textContent = "Ready to play";
+        audioToggle.disabled = false;
+
+        // Stop current playback if switching stations
+        if (isPlaying) {
+          stopAudio();
+        }
+
+        audioPlayer.src = source.url;
+      }
+
+      function playAudio() {
+        audioPlayer
+          .play()
+          .then(() => {
+            isPlaying = true;
+            audioToggle.innerHTML = "&#10074;&#10074;";
+            audioStatus.textContent = "Playing...";
+          })
+          .catch((err) => {
+            audioStatus.textContent = "Error: " + err.message;
+          });
+      }
+
+      function stopAudio() {
+        audioPlayer.pause();
+        audioPlayer.currentTime = 0;
+        isPlaying = false;
+        audioToggle.innerHTML = "&#9654;";
+        audioStatus.textContent = "Paused";
+      }
+
+      audioToggle.addEventListener("click", () => {
+        if (isPlaying) {
+          stopAudio();
+        } else {
+          playAudio();
+        }
+      });
+
+      volumeControl.addEventListener("input", () => {
+        audioPlayer.volume = volumeControl.value / 100;
+      });
+      audioPlayer.volume = 0.5;
+
+      audioPlayer.addEventListener("playing", () => {
+        audioStatus.textContent = "Playing...";
+      });
+
+      audioPlayer.addEventListener("waiting", () => {
+        audioStatus.textContent = "Buffering...";
+      });
+
+      audioPlayer.addEventListener("error", () => {
+        audioStatus.textContent = "Error loading stream";
+      });
+
+      sourceSelect.addEventListener("change", async () => {
+        const source = sourceSelect.value;
+        if (!source) {
+          startBtn.disabled = true;
+          updateAudioSource(null);
+          return;
+        }
+
+        startBtn.disabled = true;
+        setStatus("waiting", "Setting source...");
+
+        const res = await fetch("/sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source }),
+        });
+
+        if (res.ok) {
+          startBtn.disabled = false;
+          setStatus("disconnected", "Ready");
+          updateAudioSource(source);
+        } else {
+          setStatus("disconnected", "Error");
+        }
+      });
+
+      startBtn.addEventListener("click", () => {
+        if (eventSource) return;
+
+        messagesEl.innerHTML = "";
+        setStatus("waiting", "Connecting...");
+
+        // Auto-play audio when starting
+        if (!isPlaying && audioPlayer.src) {
+          playAudio();
+        }
+
+        eventSource = new EventSource("/stream");
+
+        eventSource.onopen = () => {
+          setStatus("connected", "Connected");
+          startBtn.disabled = true;
+          stopBtn.disabled = false;
+        };
+
+        eventSource.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+
+          if (msg.type === "delta") {
+            if (msg.responseId !== currentResponseId) {
+              currentResponseId = msg.responseId;
+              currentMessageEl = document.createElement("div");
+              currentMessageEl.className = "message";
+              currentMessageEl.innerHTML = `
+              <div class="current-message"></div>
+              <div class="message-meta">ID: ${msg.responseId.slice(-8)}</div>
+            `;
+              messagesEl.prepend(currentMessageEl);
+            }
+            const textEl = currentMessageEl.querySelector(".current-message");
+            textEl.textContent += msg.text;
+          } else if (msg.type === "complete") {
+            if (currentMessageEl) {
+              currentMessageEl.classList.add("complete");
+            }
+            currentResponseId = null;
+            currentMessageEl = null;
+          } else if (msg.type === "error") {
+            const errEl = document.createElement("div");
+            errEl.className = "message error";
+            errEl.textContent = `Error: ${msg.message}`;
+            messagesEl.prepend(errEl);
+          }
+        };
+
+        eventSource.onerror = () => {
+          setStatus("disconnected", "Disconnected");
+          stopStream();
+        };
+      });
+
+      stopBtn.addEventListener("click", stopStream);
+
+      function stopStream() {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        setStatus("disconnected", "Stopped");
+      }
+
+      loadSources();
+    </script>
+  </body>
+</html>
