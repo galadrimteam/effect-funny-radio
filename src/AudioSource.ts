@@ -3,7 +3,7 @@ import {
   CommandExecutor,
   Error as PlatformError,
 } from "@effect/platform";
-import { Context, Effect, Layer, Option, Ref, Stream } from "effect";
+import { Effect, Option, Ref, Stream } from "effect";
 
 export const AUDIO_SOURCES = {
   franceinfo: {
@@ -24,19 +24,6 @@ export type AudioSourceId = keyof typeof AUDIO_SOURCES;
 
 export const BYTES_PER_SECOND = 24000 * 2;
 const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50);
-
-export class AudioSource extends Context.Tag("AudioSource")<
-  AudioSource,
-  {
-    readonly currentSource: Effect.Effect<Option.Option<AudioSourceId>>;
-    readonly setSource: (id: AudioSourceId | null) => Effect.Effect<void>;
-    readonly getStream: () => Stream.Stream<
-      Buffer,
-      PlatformError.PlatformError,
-      CommandExecutor.CommandExecutor
-    >;
-  }
->() {}
 
 const batchByBytes = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
   stream.pipe(
@@ -73,9 +60,9 @@ const createAudioStream = (url: string) =>
     "-"
   ).pipe(Command.stream, batchByBytes);
 
-export const AudioSourceLive = Layer.effect(
-  AudioSource,
-  Effect.gen(function* () {
+export class AudioSource extends Effect.Service<AudioSource>()("AudioSource", {
+  accessors: true,
+  effect: Effect.gen(function* () {
     const sourceRef = yield* Ref.make<Option.Option<AudioSourceId>>(
       Option.none()
     );
@@ -84,7 +71,11 @@ export const AudioSourceLive = Layer.effect(
       currentSource: Ref.get(sourceRef),
       setSource: (id: AudioSourceId | null) =>
         Ref.set(sourceRef, Option.fromNullable(id)),
-      getStream: () =>
+      getStream: (): Stream.Stream<
+        Buffer,
+        PlatformError.PlatformError,
+        CommandExecutor.CommandExecutor
+      > =>
         Stream.unwrap(
           Ref.get(sourceRef).pipe(
             Effect.map((maybeSourceId) =>
@@ -100,6 +91,6 @@ export const AudioSourceLive = Layer.effect(
             )
           )
         ),
-    } as const;
-  })
-);
+    };
+  }),
+}) {}

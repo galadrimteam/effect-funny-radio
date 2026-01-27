@@ -144,8 +144,7 @@ const sourcesGroupLive = HttpApiBuilder.group(
     handlers
       .handle("getSources", () =>
         Effect.gen(function* () {
-          const audioSource = yield* AudioSource;
-          const maybeCurrent = yield* audioSource.currentSource;
+          const maybeCurrent = yield* AudioSource.currentSource;
           const sources = Object.entries(AUDIO_SOURCES).map(([id, info]) => ({
             id: id as AudioSourceId,
             name: info.name,
@@ -156,8 +155,7 @@ const sourcesGroupLive = HttpApiBuilder.group(
       )
       .handle("setSource", ({ payload }) =>
         Effect.gen(function* () {
-          const audioSource = yield* AudioSource;
-          yield* audioSource.setSource(payload.source);
+          yield* AudioSource.setSource(payload.source);
           const name = payload.source
             ? AUDIO_SOURCES[payload.source].name
             : null;
@@ -176,8 +174,7 @@ const streamGroupLive = HttpApiBuilder.group(
   (handlers) =>
     handlers.handleRaw("getStream", () =>
       Effect.gen(function* () {
-        const audioSource = yield* AudioSource;
-        const maybeCurrent = yield* audioSource.currentSource;
+        const maybeCurrent = yield* AudioSource.currentSource;
 
         if (Option.isNone(maybeCurrent)) {
           return yield* new HttpApiError.ServiceUnavailable();

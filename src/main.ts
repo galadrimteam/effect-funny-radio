@@ -6,16 +6,10 @@ import {
 } from "@effect/platform";
 import { BunContext, BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer } from "effect";
-import { AudioSourceLive } from "./AudioSource.js";
+import { AudioSource } from "./AudioSource.js";
 import { OpenAIRealtime } from "./OpenAIRealtime.js";
 import { AudioProcessor } from "./AudioProcessor.js";
 import { FunnyRadioApiLive } from "./HttpApi.js";
-
-const startAudioProcessing = Effect.gen(function* () {
-  yield* Effect.log("Funny Radio - Sarcastic News Transformer");
-  const processor = yield* AudioProcessor;
-  yield* processor.run;
-});
 
 const loadHttpServer = Layer.unwrapEffect(
   Config.port("PORT").pipe(
@@ -37,13 +31,13 @@ const HttpLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
 );
 
 const ServicesLive = Layer.mergeAll(
-  AudioSourceLive,
+  AudioSource.Default,
   OpenAIRealtime.Default,
   BunContext.layer
 );
 
 const AudioProcessingLive = Layer.scopedDiscard(
-  Effect.fork(startAudioProcessing)
+  Effect.fork(AudioProcessor.run)
 ).pipe(Layer.provide(AudioProcessor.Default));
 
 const AppLive = Layer.merge(HttpLive, AudioProcessingLive).pipe(

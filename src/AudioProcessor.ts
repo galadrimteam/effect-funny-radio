@@ -22,10 +22,11 @@ class SourceClearedError extends Schema.TaggedError<SourceClearedError>()(
 export class AudioProcessor extends Effect.Service<AudioProcessor>()(
   "AudioProcessor",
   {
+    accessors: true,
     effect: Effect.gen(function* () {
-      const audioSource = yield* AudioSource;
+      yield* Effect.log("Funny Radio - Sarcastic News Transformer");
 
-      const waitForSource = audioSource.currentSource.pipe(
+      const waitForSource = AudioSource.currentSource.pipe(
         Effect.flatMap(Either.fromOption(() => new NoSourceError())),
         Effect.retry(Schedule.spaced("1 second"))
       );
@@ -40,11 +41,12 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
           const accumulatedBytes = yield* Ref.make(0);
           const bytesSinceLastCommit = yield* Ref.make(0);
 
-          yield* audioSource.getStream().pipe(
+          const audioStream = yield* AudioSource.getStream();
+          yield* audioStream.pipe(
             Stream.runForEach((chunk) =>
               Effect.gen(function* () {
                 // Check if source was cleared or changed
-                yield* audioSource.currentSource.pipe(
+                yield* AudioSource.currentSource.pipe(
                   Effect.flatMap(
                     Either.fromOption(() => new SourceClearedError())
                   ),
