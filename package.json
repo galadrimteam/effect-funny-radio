@@ -5,7 +5,7 @@
   "scripts": {
     "format": "prettier --write ./*.ts",
     "install": "effect-language-service patch",
-    "build": "tsc",
+    "build": "tsc && cp src/index.html dist/",
     "check": "tsc --noEmit"
   },
   "devDependencies": {
