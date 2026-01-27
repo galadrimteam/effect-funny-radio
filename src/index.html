@@ -323,15 +323,18 @@
       });
 
       sourceSelect.addEventListener("change", async () => {
-        const source = sourceSelect.value;
-        if (!source) {
-          startBtn.disabled = true;
-          updateAudioSource(null);
-          return;
-        }
+        const source = sourceSelect.value || null;
 
         startBtn.disabled = true;
-        setStatus("waiting", "Setting source...");
+        setStatus(
+          "waiting",
+          source ? "Setting source..." : "Clearing source..."
+        );
+
+        // Stop stream if running when changing source
+        if (eventSource) {
+          stopStream();
+        }
 
         const res = await fetch("/sources", {
           method: "POST",
@@ -340,8 +343,8 @@
         });
 
         if (res.ok) {
-          startBtn.disabled = false;
-          setStatus("disconnected", "Ready");
+          startBtn.disabled = !source;
+          setStatus("disconnected", source ? "Ready" : "No source");
           updateAudioSource(source);
         } else {
           setStatus("disconnected", "Error");
@@ -397,22 +400,38 @@
           }
         };
 
-        eventSource.onerror = () => {
-          setStatus("disconnected", "Disconnected");
+        eventSource.onerror = (e) => {
+          // EventSource doesn't expose HTTP status, but we can detect connection failures
+          if (eventSource.readyState === EventSource.CLOSED) {
+            setStatus("disconnected", "Connection failed");
+          } else {
+            setStatus("disconnected", "Disconnected");
+          }
           stopStream();
+          startBtn.disabled = !sourceSelect.value;
         };
       });
 
-      stopBtn.addEventListener("click", stopStream);
+      stopBtn.addEventListener("click", async () => {
+        stopStream();
+        // Clear source on backend to stop audio processing
+        await fetch("/sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: null }),
+        });
+        sourceSelect.value = "";
+        updateAudioSource(null);
+        startBtn.disabled = true;
+        setStatus("disconnected", "No source");
+      });
 
       function stopStream() {
         if (eventSource) {
           eventSource.close();
           eventSource = null;
         }
-        startBtn.disabled = false;
         stopBtn.disabled = true;
-        setStatus("disconnected", "Stopped");
       }
 
       loadSources();
