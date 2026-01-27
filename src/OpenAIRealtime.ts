@@ -20,6 +20,8 @@ Gardez TOUS les faits importants exacts - n'inventez ni ne mentez jamais.
 Rendez-la plus legere, ajoutez des observations pleines d'esprit, un brin de moquerie bienveillante sur la situation ou les politiciens, mais restez respectueux.
 Terminez sur une note pleine d'espoir ou ridiculement positive.`;
 
+const sessionUpdateMessage = `{"type":"session.update","session":{"type":"realtime","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"turn_detection":null,"noise_reduction":null}},"instructions":"${systemInstruction}","model":"gpt-realtime-mini","output_modalities":["text"],"tracing":"auto"}}`;
+
 export type ServerEvent =
   | { type: "response.output_text.delta"; response_id: string; delta: string }
   | { type: "response.done"; response: { id: string; status: string } }
@@ -91,25 +93,7 @@ export class OpenAIRealtime extends Effect.Service<OpenAIRealtime>()(
           } catch {}
         });
 
-        ws.send(
-          JSON.stringify({
-            type: "session.update",
-            session: {
-              type: "realtime",
-              audio: {
-                input: {
-                  format: { type: "audio/pcm", rate: 24000 },
-                  turn_detection: null,
-                  noise_reduction: null,
-                },
-              },
-              instructions: systemInstruction,
-              model: "gpt-realtime-mini",
-              output_modalities: ["text"],
-              tracing: "auto",
-            },
-          })
-        );
+        ws.send(sessionUpdateMessage);
 
         yield* Effect.log("Connected to OpenAI Realtime API");
 
