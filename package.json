@@ -3,7 +3,10 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "format": "prettier --write ./*.ts"
+    "format": "prettier --write ./*.ts",
+    "install": "effect-language-service patch",
+    "build": "tsc",
+    "check": "tsc --noEmit"
   },
   "devDependencies": {
     "@effect/language-service": "^0.69.2",
