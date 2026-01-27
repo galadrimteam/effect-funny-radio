@@ -7,7 +7,9 @@ import {
   HttpApiSchema,
   HttpServerResponse,
   OpenApi,
+  Path,
 } from "@effect/platform";
+import { fileURLToPath } from "node:url";
 import { Effect, Layer, Option, Schema, Stream } from "effect";
 import {
   AudioSource,
@@ -128,11 +130,11 @@ const formatSSE = (msg: BroadcastMessage): string =>
 const uiGroupLive = HttpApiBuilder.group(FunnyRadioApi, "ui", (handlers) =>
   handlers.handleRaw("getIndex", () =>
     Effect.gen(function* () {
-      const html = yield* Effect.promise(() =>
-        Bun.file(import.meta.dir + "/index.html").text()
-      );
-      return HttpServerResponse.text(html, { contentType: "text/html" });
-    })
+      const path = yield* Path.Path;
+      const currentDir = path.dirname(fileURLToPath(import.meta.url));
+      const htmlPath = path.join(currentDir, "index.html");
+      return yield* HttpServerResponse.file(htmlPath);
+    }).pipe(Effect.orDie)
   )
 );
 
