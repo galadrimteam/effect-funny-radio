@@ -47,16 +47,16 @@ const AudioSourcesResponse = Schema.Struct({
 }).annotations({ title: "Audio Sources Response" });
 
 const SetSourceRequest = Schema.Struct({
-  source: AudioSourceIdSchema.annotations({
-    description: "The audio source to select",
+  source: Schema.NullOr(AudioSourceIdSchema).annotations({
+    description: "The audio source to select, or null to clear",
   }),
 }).annotations({ title: "Set Source Request" });
 
 const SetSourceResponse = Schema.Struct({
   success: Schema.Boolean,
-  current: AudioSourceIdSchema,
-  name: Schema.String.annotations({
-    description: "Name of the selected source",
+  current: Schema.NullOr(AudioSourceIdSchema),
+  name: Schema.NullOr(Schema.String).annotations({
+    description: "Name of the selected source, or null if cleared",
   }),
 }).annotations({ title: "Set Source Response" });
 
@@ -158,8 +158,12 @@ const sourcesGroupLive = HttpApiBuilder.group(
         Effect.gen(function* () {
           const audioSource = yield* AudioSource;
           yield* audioSource.setSource(payload.source);
-          const name = AUDIO_SOURCES[payload.source].name;
-          yield* Effect.log(`Audio source changed to: ${name}`);
+          const name = payload.source
+            ? AUDIO_SOURCES[payload.source].name
+            : null;
+          yield* Effect.log(
+            name ? `Audio source changed to: ${name}` : "Audio source cleared"
+          );
           return { success: true, current: payload.source, name };
         })
       )

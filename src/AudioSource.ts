@@ -29,7 +29,7 @@ export class AudioSource extends Context.Tag("AudioSource")<
   AudioSource,
   {
     readonly currentSource: Effect.Effect<Option.Option<AudioSourceId>>;
-    readonly setSource: (id: AudioSourceId) => Effect.Effect<void>;
+    readonly setSource: (id: AudioSourceId | null) => Effect.Effect<void>;
     readonly getStream: () => Stream.Stream<
       Buffer,
       PlatformError.PlatformError,
@@ -82,7 +82,8 @@ export const AudioSourceLive = Layer.effect(
 
     return {
       currentSource: Ref.get(sourceRef),
-      setSource: (id: AudioSourceId) => Ref.set(sourceRef, Option.some(id)),
+      setSource: (id: AudioSourceId | null) =>
+        Ref.set(sourceRef, Option.fromNullable(id)),
       getStream: () =>
         Stream.unwrap(
           Ref.get(sourceRef).pipe(
