@@ -8,7 +8,7 @@ import { BunContext, BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer, Context } from "effect";
 import { AudioSource } from "./AudioSource.js";
 import { OpenAIRealtime } from "./OpenAIRealtime.js";
-import { AudioProcessor } from "./AudioProcessor.js";
+import { runAudioProcessor } from "./AudioProcessor.js";
 import { FunnyRadioApiLive } from "./HttpApi.js";
 
 const HttpServerLive = Layer.unwrapEffect(
@@ -31,8 +31,8 @@ const ServicesLive = Layer.mergeAll(
 );
 
 const AudioProcessingLive = Layer.scopedDiscard(
-  Effect.fork(AudioProcessor.run)
-).pipe(Layer.provide(AudioProcessor.Default));
+  Effect.fork(runAudioProcessor)
+);
 
 const AppLive = Layer.merge(HttpLive, AudioProcessingLive).pipe(
   Layer.provide(ServicesLive)
