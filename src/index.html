@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Funny Radio - Actualites Sarcastiques</title>
+    <title>Funny Radio - Actualités Sarcastiques</title>
     <style>
       * {
         box-sizing: border-box;
@@ -221,7 +221,7 @@
       <header>
         <h1>Funny Radio</h1>
         <p class="subtitle">
-          Les actualites francaises, version sarcastique et optimiste
+          Les actualités françaises, version sarcastique et optimiste
         </p>
       </header>
 
@@ -241,7 +241,7 @@
         <div id="messages-container">
           <div class="placeholder">
             <div class="placeholder-icon">📻</div>
-            <p>Selectionnez une station pour commencer</p>
+            <p>Sélectionnez une station pour commencer</p>
           </div>
         </div>
       </div>
@@ -254,6 +254,14 @@
         eventSource: null,
         messages: new Map(),
       };
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
 
       const sourcesContainer = document.getElementById("sources");
       const messagesContainer = document.getElementById("messages-container");
@@ -280,7 +288,7 @@
         if (state.currentSource) {
           const stopBtn = document.createElement("button");
           stopBtn.className = "source-btn stop";
-          stopBtn.textContent = "Arreter";
+          stopBtn.textContent = "Arrêter";
           stopBtn.onclick = () => setSource(null);
           sourcesContainer.appendChild(stopBtn);
         }
@@ -304,9 +312,13 @@
         }
 
         el.querySelector(".text").textContent = data.text;
-        el.querySelector(".meta").textContent = data.complete
-          ? "Complet"
+
+        const sourceName = data.sourceName || "Source inconnue";
+        const timeInfo = data.complete
+          ? `Complété à ${formatTime(data.completedAt)}`
           : "En cours...";
+        el.querySelector(".meta").textContent = `${sourceName} • ${timeInfo}`;
+
         el.className = "message" + (data.complete ? " complete" : "");
       }
 
@@ -336,7 +348,7 @@
             );
             connectStream();
           } else {
-            updateStatus(false, "Aucune station selectionnee");
+            updateStatus(false, "Aucune station sélectionnée");
           }
         } catch (err) {
           updateStatus(false, "Erreur de chargement");
@@ -363,7 +375,7 @@
             updateStatus(false, `${data.name} - Connexion...`);
             connectStream();
           } else {
-            updateStatus(false, "Aucune station selectionnee");
+            updateStatus(false, "Aucune station sélectionnée");
           }
         } catch (err) {
           updateStatus(false, "Erreur");
@@ -382,7 +394,7 @@
           const sourceName =
             state.sources.find((s) => s.id === state.currentSource)?.name ||
             state.currentSource;
-          updateStatus(true, `${sourceName} - Connecte`);
+          updateStatus(true, `${sourceName} - Connecté`);
         };
 
         state.eventSource.onmessage = (event) => {
@@ -393,6 +405,9 @@
               const existing = state.messages.get(msg.responseId) || {
                 text: "",
                 complete: false,
+                sourceName:
+                  state.sources.find((s) => s.id === state.currentSource)
+                    ?.name || state.currentSource,
               };
               existing.text += msg.text;
               state.messages.set(msg.responseId, existing);
@@ -401,6 +416,7 @@
               const existing = state.messages.get(msg.responseId);
               if (existing) {
                 existing.complete = true;
+                existing.completedAt = new Date();
                 state.messages.set(msg.responseId, existing);
                 renderMessage(msg.responseId);
               }
