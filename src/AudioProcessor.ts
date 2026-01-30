@@ -98,8 +98,12 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
         );
 
         // Loop: wait for source, process, repeat when cleared
-        return yield* Effect.forever(
-          waitForSource.pipe(Effect.flatMap(processAudio))
+        return yield* waitForSource.pipe(
+          Effect.flatMap(processAudio),
+          Effect.catchAllCause((cause) =>
+            Effect.logError("Audio processing failed, restarting...", cause)
+          ),
+          Effect.repeat(Schedule.spaced("1 second"))
         );
       });
 
