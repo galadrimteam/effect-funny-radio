@@ -11,26 +11,28 @@ import {
   Ref,
   Scope,
 } from "effect";
+import type { ServerEvent, BroadcastMessage } from "./Messages.js";
+import { systemInstruction } from "./SystemPrompt.js";
 
 const OPENAI_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 
-const systemInstruction = `Vous etes un humoriste de stand-up tres sarcastique mais au coeur tendre, qui trouve toujours le bon cote des choses.
-Transformez l'extrait audio d'actualite en une version courte, drole et optimiste (maximum 3 a 6 phrases).
-Gardez TOUS les faits importants exacts - n'inventez ni ne mentez jamais.
-Rendez-la plus legere, ajoutez des observations pleines d'esprit, un brin de moquerie bienveillante sur la situation ou les politiciens, mais restez respectueux.
-Terminez sur une note pleine d'espoir ou ridiculement positive.`;
-
-const sessionUpdateMessage = `{"type":"session.update","session":{"type":"realtime","audio":{"input":{"format":{"type":"audio/pcm","rate":24000},"turn_detection":null,"noise_reduction":null}},"instructions":${JSON.stringify(systemInstruction)},"model":"gpt-realtime-mini","output_modalities":["text"],"tracing":"auto"}}`;
-
-export type ServerEvent =
-  | { type: "response.output_text.delta"; response_id: string; delta: string }
-  | { type: "response.done"; response: { id: string; status: string } }
-  | { type: "error"; error: { message: string } };
-
-export type BroadcastMessage =
-  | { type: "delta"; responseId: string; text: string }
-  | { type: "complete"; responseId: string }
-  | { type: "error"; message: string };
+const sessionUpdate = {
+  type: "session.update",
+  session: {
+    type: "realtime",
+    audio: {
+      input: {
+        format: { type: "audio/pcm", rate: 24000 },
+        turn_detection: null,
+        noise_reduction: null,
+      },
+    },
+    instructions: systemInstruction,
+    model: "gpt-realtime-mini",
+    output_modalities: ["text"],
+    tracing: "auto",
+  },
+};
 
 class WebSocketError extends Data.TaggedError("WebSocketError")<{
   cause: unknown;
@@ -97,7 +99,7 @@ export class OpenAIRealtime extends Effect.Service<OpenAIRealtime>()(
             }
           });
 
-          ws.send(sessionUpdateMessage);
+          ws.send(JSON.stringify(sessionUpdate));
 
           yield* Effect.log("Connected to OpenAI Realtime API");
 
@@ -141,11 +143,18 @@ export class OpenAIRealtime extends Effect.Service<OpenAIRealtime>()(
         })
       );
 
+      const send = (msg: object) =>
+        connect.pipe(
+          Effect.flatMap((c) =>
+            Effect.sync(() => c.ws.send(JSON.stringify(msg)))
+          )
+        );
+
       return {
-        send: (msg: string) =>
-          connect.pipe(
-            Effect.flatMap((c) => Effect.sync(() => c.ws.send(msg)))
-          ),
+        appendAudio: (base64: string) =>
+          send({ type: "input_audio_buffer.append", audio: base64 }),
+        commitBuffer: () => send({ type: "input_audio_buffer.commit" }),
+        requestResponse: () => send({ type: "response.create" }),
         subscribe: connect.pipe(
           Effect.flatMap((c) => PubSub.subscribe(c.pubsub))
         ),
