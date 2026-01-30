@@ -161,9 +161,33 @@ src/
 ├── main.ts              # Application entry point and layer composition
 ├── HttpApi.ts           # HTTP API definition (routes, schemas, handlers)
 ├── AudioSource.ts       # Audio stream management (ffmpeg integration)
-├── AudioProcessor.ts    # Audio processing pipeline (chunks → OpenAI)
+├── AudioProcessor.ts    # Audio processing effect (chunks → OpenAI)
 ├── OpenAIRealtime.ts    # OpenAI Realtime API WebSocket client
+├── Messages.ts          # Shared domain types (BroadcastMessage, ServerEvent)
+├── SystemPrompt.ts      # AI system instruction
 └── index.html           # Web UI
+```
+
+### Layer Graph
+
+```
+AppLive
+├── HttpLive
+│   ├── HttpApiBuilder.serve (HttpMiddleware.logger)
+│   ├── HttpApiScalar (/docs)
+│   ├── FunnyRadioApiLive
+│   │   ├── uiGroupLive        → serves index.html
+│   │   ├── sourcesGroupLive   → AudioSource
+│   │   └── streamGroupLive    → AudioSource, OpenAIRealtime
+│   ├── HttpServer.withLogAddress
+│   └── HttpServerLive (BunHttpServer, port from Config)
+├── AudioProcessingLive
+│   └── runAudioProcessor (forked Effect)
+│       → AudioSource, OpenAIRealtime
+└── ServicesLive
+    ├── AudioSource.Default
+    │   └── BunContext.layer (CommandExecutor for ffmpeg)
+    └── OpenAIRealtime.Default
 ```
 
 ## How It Works
