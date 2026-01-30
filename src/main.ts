@@ -26,9 +26,8 @@ const HttpLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
 );
 
 const ServicesLive = Layer.mergeAll(
-  AudioSource.Default,
-  OpenAIRealtime.Default,
-  BunContext.layer
+  AudioSource.Default.pipe(Layer.provide(BunContext.layer)),
+  OpenAIRealtime.Default
 );
 
 const AudioProcessingLive = Layer.scopedDiscard(

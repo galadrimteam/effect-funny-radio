@@ -36,33 +36,39 @@ const batchByBytes = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
     Stream.filterMap((x) => x)
   );
 
-const createAudioStream = (url: string) =>
-  Command.make(
-    "ffmpeg",
-    "-fflags",
-    "+nobuffer",
-    "-flags",
-    "+low_delay",
-    "-probesize",
-    "32",
-    "-analyzeduration",
-    "0",
-    "-i",
-    url,
-    "-f",
-    "s16le",
-    "-ar",
-    "24000",
-    "-ac",
-    "1",
-    "-flush_packets",
-    "1",
-    "-"
-  ).pipe(Command.stream, batchByBytes);
-
 export class AudioSource extends Effect.Service<AudioSource>()("AudioSource", {
   accessors: true,
   effect: Effect.gen(function* () {
+    const executor = yield* CommandExecutor.CommandExecutor;
+
+    const createAudioStream = (url: string) =>
+      Command.make(
+        "ffmpeg",
+        "-fflags",
+        "+nobuffer",
+        "-flags",
+        "+low_delay",
+        "-probesize",
+        "32",
+        "-analyzeduration",
+        "0",
+        "-i",
+        url,
+        "-f",
+        "s16le",
+        "-ar",
+        "24000",
+        "-ac",
+        "1",
+        "-flush_packets",
+        "1",
+        "-"
+      ).pipe(
+        Command.stream,
+        batchByBytes,
+        Stream.provideService(CommandExecutor.CommandExecutor, executor)
+      );
+
     const sourceRef = yield* Ref.make<Option.Option<AudioSourceId>>(
       Option.none()
     );
@@ -71,11 +77,7 @@ export class AudioSource extends Effect.Service<AudioSource>()("AudioSource", {
       currentSource: Ref.get(sourceRef),
       setSource: (id: AudioSourceId | null) =>
         Ref.set(sourceRef, Option.fromNullable(id)),
-      getStream: (): Stream.Stream<
-        Buffer,
-        PlatformError.PlatformError,
-        CommandExecutor.CommandExecutor
-      > =>
+      getStream: (): Stream.Stream<Buffer, PlatformError.PlatformError> =>
         Stream.unwrap(
           Ref.get(sourceRef).pipe(
             Effect.map((maybeSourceId) =>
