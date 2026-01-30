@@ -11,35 +11,18 @@ import { OpenAIRealtime } from "./OpenAIRealtime.js";
 import { AudioProcessor } from "./AudioProcessor.js";
 import { FunnyRadioApiLive } from "./HttpApi.js";
 
-const ListeningPort = Context.GenericTag<number>("ListeningPort");
-const ListeningPortLive = Layer.effect(
-  ListeningPort,
-  Config.port("PORT").pipe(Config.withDefault(3000))
-);
-
 const HttpServerLive = Layer.unwrapEffect(
-  ListeningPort.pipe(
+  Config.port("PORT").pipe(
+    Config.withDefault(3000),
     Effect.map((port) => BunHttpServer.layer({ port, idleTimeout: 0 }))
   )
 );
 
-const logListeningServer = <A, E, R>(layer: Layer.Layer<A, E, R>) =>
-  Layer.effectDiscard(
-    ListeningPort.pipe(
-      Effect.flatMap((port) =>
-        Effect.log(
-          `Server: http://localhost:${port} | Docs: http://localhost:${port}/docs`
-        )
-      )
-    )
-  ).pipe(Layer.provideMerge(layer));
-
 const HttpLive = HttpApiBuilder.serve(HttpMiddleware.logger).pipe(
   Layer.provide(HttpApiScalar.layer({ path: "/docs" })),
   Layer.provide(FunnyRadioApiLive),
-  logListeningServer,
-  Layer.provide(HttpServerLive),
-  Layer.provide(ListeningPortLive)
+  HttpServer.withLogAddress,
+  Layer.provide(HttpServerLive)
 );
 
 const ServicesLive = Layer.mergeAll(
