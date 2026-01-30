@@ -56,9 +56,7 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
                   )
                 );
 
-                yield* openai.send(
-                  `{"type":"input_audio_buffer.append","audio":"${chunk.toString("base64")}"}`
-                );
+                yield* openai.appendAudio(chunk.toString("base64"));
 
                 const acc = yield* Ref.updateAndGet(
                   accumulatedBytes,
@@ -70,7 +68,7 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
                 );
 
                 if (since >= COMMIT_BYTES && acc < TARGET_BYTES) {
-                  yield* openai.send('{"type":"input_audio_buffer.commit"}');
+                  yield* openai.commitBuffer();
                   yield* Ref.set(bytesSinceLastCommit, 0);
                 }
 
@@ -78,8 +76,8 @@ export class AudioProcessor extends Effect.Service<AudioProcessor>()(
                   yield* Effect.log(
                     `Requesting response (${(acc / BYTES_PER_SECOND).toFixed(1)}s of audio)`
                   );
-                  yield* openai.send('{"type":"input_audio_buffer.commit"}');
-                  yield* openai.send('{"type":"response.create"}');
+                  yield* openai.commitBuffer();
+                  yield* openai.requestResponse();
                   yield* Ref.set(accumulatedBytes, 0);
                   yield* Ref.set(bytesSinceLastCommit, 0);
                 }

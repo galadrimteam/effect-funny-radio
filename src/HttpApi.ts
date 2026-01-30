@@ -16,7 +16,8 @@ import {
   AUDIO_SOURCES,
   type AudioSourceId,
 } from "./AudioSource.js";
-import { type BroadcastMessage, OpenAIRealtime } from "./OpenAIRealtime.js";
+import type { BroadcastMessage } from "./Messages.js";
+import { OpenAIRealtime } from "./OpenAIRealtime.js";
 
 // Schema for audio source selection
 const AudioSourceIdSchema = Schema.Literal(
