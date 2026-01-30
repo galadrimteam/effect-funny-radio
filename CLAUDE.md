@@ -12,11 +12,14 @@ This project transforms French radio news into sarcastic, optimistic summaries u
 
 Use Bun instead of Node.js:
 
-- Use `bun run src/main.ts` to run the application
+- Use `bun run dev` to run the application in development mode (fastest)
+- Use `bun run build` to build an optimized production bundle
+- Use `bun run start` to run the built application
 - Use `bun install` for dependencies
 - Use `bun test` for testing
 - Use `bunx <package>` instead of `npx`
 - Bun automatically loads .env files
+- Build process uses Bun's native bundler (not tsc) to create a single optimized bundle
 
 ## Project Architecture
 

@@ -5,7 +5,9 @@
   "scripts": {
     "format": "prettier --write ./*.ts",
     "prepare": "effect-language-service patch",
-    "build": "tsc && cp src/index.html dist/",
+    "build": "bun build src/main.ts --outdir dist --target bun --sourcemap=external && cp src/index.html dist/",
+    "start": "bun dist/main.js",
+    "dev": "bun run src/main.ts",
     "check": "tsc --noEmit"
   },
   "devDependencies": {

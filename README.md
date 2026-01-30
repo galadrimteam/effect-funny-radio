@@ -43,10 +43,21 @@ PORT=8080
 
 ## Running the Application
 
-Start the server:
+### Development Mode
+
+Run directly from source (fastest for development):
 
 ```bash
-bun run src/main.ts
+bun run dev
+```
+
+### Production Mode
+
+Build and run the optimized bundle:
+
+```bash
+bun run build
+bun run start
 ```
 
 The server will start and display:
@@ -174,6 +185,12 @@ src/
 
 ## Development
 
+Run in development mode (no build required):
+
+```bash
+bun run dev
+```
+
 Type check:
 
 ```bash
@@ -186,10 +203,22 @@ Format code:
 bun run format
 ```
 
-Build:
+Build for production:
 
 ```bash
 bun run build
+```
+
+The build process:
+- Bundles all TypeScript modules using Bun's native bundler
+- Outputs optimized `main.js` (4.7 MB) to `dist/`
+- Generates source maps for debugging
+- Copies `index.html` to `dist/`
+
+Run the built application:
+
+```bash
+bun run start
 ```
 
 ## License
