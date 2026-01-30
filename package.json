@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "format": "prettier --write ./*.ts",
-    "install": "effect-language-service patch",
+    "prepare": "effect-language-service patch",
     "build": "tsc && cp src/index.html dist/",
     "check": "tsc --noEmit"
   },
@@ -18,12 +18,9 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@effect/ai": "^0.33.2",
-    "@effect/ai-google": "^0.12.1",
     "@effect/platform": "^0.94.2",
     "@effect/platform-bun": "^0.87.1",
     "@effect/platform-node": "^0.104.1",
-    "@google/genai": "^1.38.0",
     "effect": "^3.19.15"
   },
   "trustedDependencies": [
