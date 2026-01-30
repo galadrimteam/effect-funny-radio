@@ -1,111 +1,61 @@
 ---
-description: Use Bun instead of Node.js, npm, pnpm, or vite.
+description: Effect Funny Radio - AI-powered sarcastic news transformer
 globs: "*.ts, *.tsx, *.html, *.css, *.js, *.jsx, package.json"
 alwaysApply: false
 ---
 
-Default to using Bun instead of Node.js.
+# Funny Radio - Sarcastic News Transformer
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+This project transforms French radio news into sarcastic, optimistic summaries using OpenAI's Realtime API.
 
-## APIs
+## Runtime & Tooling
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+Use Bun instead of Node.js:
 
-## Testing
+- Use `bun run src/main.ts` to run the application
+- Use `bun install` for dependencies
+- Use `bun test` for testing
+- Use `bunx <package>` instead of `npx`
+- Bun automatically loads .env files
 
-Use `bun test` to run tests.
+## Project Architecture
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+This project uses **Effect** (effect-ts) for functional programming patterns:
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
+- **Effect.Service**: All major components are Effect services (AudioSource, AudioProcessor, OpenAIRealtime)
+- **Layers**: Dependencies are composed using Effect layers (see src/main.ts)
+- **Streams**: Audio processing uses Effect streams for reactive data flow
+- **Error handling**: Typed errors using Schema.TaggedError
+- **Concurrency**: Uses Ref, Queue, PubSub for state management
 
-## Frontend
+### Key Modules
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
+- **src/main.ts**: Application entry point, layer composition
+- **src/HttpApi.ts**: HTTP API definition using @effect/platform HttpApi
+- **src/AudioSource.ts**: Manages French radio stream sources, uses ffmpeg via Command
+- **src/AudioProcessor.ts**: Processes audio chunks and sends to OpenAI
+- **src/OpenAIRealtime.ts**: WebSocket connection to OpenAI Realtime API
+- **src/index.html**: Web UI served at root
 
-Server:
+### Dependencies
 
-```ts#index.ts
-import index from "./index.html"
+- **@effect/platform**: Cross-platform Effect APIs (HTTP, Command, etc.)
+- **@effect/platform-bun**: Bun-specific platform implementations
+- **effect**: Core Effect library (3.x)
 
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
+## Development Patterns
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+When working on this codebase:
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
+- Follow Effect service patterns - use `Effect.gen` for sequential operations
+- Use `Layer.provide` to compose dependencies
+- Prefer Effect's `Stream` for reactive data processing
+- Use `Schema` for validation and type-safe errors
+- For HTTP endpoints, extend HttpApiGroup in HttpApi.ts
+- Audio processing constants in AudioSource.ts (BYTES_PER_SECOND, etc.)
 
-With the following `frontend.tsx`:
+## External Dependencies
 
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+- **ffmpeg**: Required for audio stream processing (convert HLS to PCM)
+- **OpenAI API key**: Required in OPENAI_API_KEY environment variable
+- **French Radio streams**: Uses Radio France public HLS streams
