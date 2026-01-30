@@ -50,6 +50,7 @@ This project uses **Effect** (effect-ts) for functional programming patterns:
 
 When working on this codebase:
 
+- **Always run `bun run check` after modifying any `.ts` file** to catch type errors early
 - Follow Effect service patterns - use `Effect.gen` for sequential operations
 - Use `Layer.provide` to compose dependencies
 - Prefer Effect's `Stream` for reactive data processing
