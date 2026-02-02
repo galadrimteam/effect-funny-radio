@@ -3,7 +3,7 @@ import {
   CommandExecutor,
   Error as PlatformError,
 } from "@effect/platform";
-import { Effect, Option, Ref, Stream } from "effect";
+import { Effect, Option, Ref, Sink, Stream } from "effect";
 
 export const AUDIO_SOURCES = {
   franceinfo: {
@@ -27,13 +27,15 @@ const BATCH_THRESHOLD = Math.floor(BYTES_PER_SECOND / 50);
 
 const batchByBytes = <E, R>(stream: Stream.Stream<Uint8Array, E, R>) =>
   stream.pipe(
-    Stream.mapAccum({ buf: [] as Uint8Array[], size: 0 }, (s, chunk) => {
-      const size = s.size + chunk.length;
-      return size >= BATCH_THRESHOLD
-        ? [{ buf: [], size: 0 }, Option.some(Buffer.concat([...s.buf, chunk]))]
-        : [{ buf: [...s.buf, chunk], size }, Option.none()];
-    }),
-    Stream.filterMap((x) => x)
+    Stream.transduce(
+      Sink.foldWeighted({
+        initial: [] as Uint8Array[],
+        maxCost: BATCH_THRESHOLD,
+        cost: (chunk) => chunk.length,
+        body: (acc, chunk) => [...acc, chunk],
+      })
+    ),
+    Stream.map((chunks) => Buffer.concat(chunks))
   );
 
 const ffmpegStream = (url: string) =>
