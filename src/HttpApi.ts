@@ -198,12 +198,7 @@ const streamGroupLive = HttpApiBuilder.group(
             Connection: "keep-alive",
           },
         });
-      }).pipe(
-        Effect.catchTag(
-          "WebSocketError",
-          () => new HttpApiError.ServiceUnavailable()
-        )
-      )
+      })
     )
 );
 
