@@ -1,0 +1,149 @@
+package main
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"log"
+	"time"
+)
+
+const (
+	TargetBytes = 15 * BytesPerSecond // 15 seconds of audio before requesting response
+	CommitBytes = 3 * BytesPerSecond  // 3 seconds between buffer commits
+)
+
+// AudioProcessor reads audio from the selected source and streams it to
+// OpenAI via the Realtime API.
+type AudioProcessor struct {
+	source *AudioSource
+	openai *OpenAIRealtime
+}
+
+func NewAudioProcessor(source *AudioSource, openai *OpenAIRealtime) *AudioProcessor {
+	return &AudioProcessor{source: source, openai: openai}
+}
+
+// Run is the main processing loop. It waits for a source to be selected,
+// processes audio, and restarts on error or source change.
+func (ap *AudioProcessor) Run(ctx context.Context) {
+	log.Println("Audio processor initialized, waiting for source selection...")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Wait for a source to be selected
+		sourceID := ap.waitForSource(ctx)
+		if sourceID == nil {
+			return // context cancelled
+		}
+
+		// Process audio for this source
+		err := ap.processAudio(ctx, *sourceID)
+		if err != nil {
+			log.Printf("Audio processing failed, restarting... error: %v", err)
+		}
+
+		// Brief pause before retrying
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (ap *AudioProcessor) waitForSource(ctx context.Context) *AudioSourceID {
+	for {
+		if id := ap.source.CurrentSource(); id != nil {
+			return id
+		}
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSourceID) error {
+	log.Printf("Source selected: %s, starting processing...", sourceID)
+
+	// Create a cancellable context for this processing session
+	procCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	audioCh, err := ap.source.Stream(procCtx)
+	if err != nil {
+		return fmt.Errorf("failed to start audio stream: %w", err)
+	}
+
+	accumulated := 0
+	sinceCommit := 0
+	chunkCount := 0
+	throughputStart := time.Now()
+
+	// Reusable base64 encode buffer — avoids allocation per chunk.
+	// BatchThreshold (4800) encodes to exactly 6400 base64 chars.
+	b64Buf := make([]byte, base64.StdEncoding.EncodedLen(BatchThreshold))
+
+	for chunk := range audioCh {
+		// Throttled source check — every 10 chunks (~1/s) instead of every chunk
+		if chunkCount%10 == 0 {
+			current := ap.source.CurrentSource()
+			if current == nil || *current != sourceID {
+				log.Println("Source cleared, stopping audio processing")
+				return nil
+			}
+		}
+
+		// Encode to base64 using reusable buffer and send to OpenAI
+		n := base64.StdEncoding.EncodedLen(len(chunk))
+		if n > len(b64Buf) {
+			b64Buf = make([]byte, n)
+		}
+		base64.StdEncoding.Encode(b64Buf[:n], chunk)
+		ap.openai.AppendAudio(string(b64Buf[:n]))
+
+		accumulated += len(chunk)
+		sinceCommit += len(chunk)
+		chunkCount++
+
+		// Steady commit cadence (every 3 seconds of audio), independent of
+		// response request timing. This ensures audio reaches OpenAI promptly
+		// and the pipeline stays saturated during response generation.
+		if sinceCommit >= CommitBytes {
+			ap.openai.CommitBuffer()
+			sinceCommit = 0
+		}
+
+		// Request response after 15 seconds of audio
+		if accumulated >= TargetBytes {
+			elapsed := time.Since(throughputStart)
+			bytesTotal := accumulated
+			log.Printf("Requesting response (%.1fs of audio)", float64(accumulated)/float64(BytesPerSecond))
+			if elapsed > 0 {
+				chunksPerSec := float64(chunkCount) / elapsed.Seconds()
+				bytesPerSec := float64(bytesTotal) / elapsed.Seconds()
+				log.Printf("[KPI] chunk_throughput: %.1f chunks/s, %.0f bytes/s (%.1fx realtime)",
+					chunksPerSec, bytesPerSec, bytesPerSec/float64(BytesPerSecond))
+			}
+			// Commit any audio accumulated since the last periodic commit
+			if sinceCommit > 0 {
+				ap.openai.CommitBuffer()
+				sinceCommit = 0
+			}
+			ap.openai.RequestResponse()
+			// Reset response window — audio keeps flowing without interruption
+			accumulated = 0
+			chunkCount = 0
+			throughputStart = time.Now()
+		}
+	}
+
+	return nil
+}
