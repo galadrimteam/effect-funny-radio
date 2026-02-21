@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Funny Radio - Actualités Sarcastiques</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f8f9fa;
+        min-height: 100vh;
+        color: #333;
+        padding: 2rem;
+      }
+
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 2rem;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        background: linear-gradient(90deg, #e63946, #f4a261);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+      }
+
+      .subtitle {
+        color: #6c757d;
+        font-size: 1.1rem;
+      }
+
+      .source-selector {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .source-selector h2 {
+        font-size: 1.2rem;
+        margin-bottom: 1rem;
+        color: #e63946;
+      }
+
+      .sources {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .source-btn {
+        padding: 0.75rem 1.25rem;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        background: #fff;
+        color: #333;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 1rem;
+      }
+
+      .source-btn:hover {
+        border-color: #f4a261;
+        background: #fff8f0;
+      }
+
+      .source-btn.active {
+        border-color: #e63946;
+        background: #fef2f2;
+        color: #e63946;
+        font-weight: 500;
+      }
+
+      .source-btn.stop {
+        border-color: #e63946;
+        color: #e63946;
+      }
+
+      .source-btn.stop:hover {
+        background: #fef2f2;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        color: #6c757d;
+      }
+
+      .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #adb5bd;
+      }
+
+      .status-dot.connected {
+        background: #2a9d8f;
+        animation: pulse 2s infinite;
+      }
+
+      .status-dot.error {
+        background: #e63946;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      .messages {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.5rem;
+        min-height: 400px;
+        max-height: 60vh;
+        overflow-y: auto;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .messages h2 {
+        font-size: 1.2rem;
+        margin-bottom: 1rem;
+        color: #e63946;
+      }
+
+      .message {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-left: 3px solid #f4a261;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .message.complete {
+        border-left-color: #2a9d8f;
+      }
+
+      .message.error {
+        border-left-color: #e63946;
+        background: #fef2f2;
+        color: #e63946;
+      }
+
+      .message .text {
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .message .meta {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 0.5rem;
+      }
+
+      .placeholder {
+        text-align: center;
+        color: #6c757d;
+        padding: 3rem;
+      }
+
+      .placeholder-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 2px solid #dee2e6;
+        border-top-color: #e63946;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Funny Radio</h1>
+        <p class="subtitle">
+          Les actualités françaises, version sarcastique et optimiste
+        </p>
+      </header>
+
+      <div class="source-selector">
+        <h2>Choisir une station</h2>
+        <div class="sources" id="sources">
+          <div class="loading"></div>
+        </div>
+        <div class="status" id="status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Chargement...</span>
+        </div>
+      </div>
+
+      <div class="messages">
+        <h2>Messages</h2>
+        <div id="messages-container">
+          <div class="placeholder">
+            <div class="placeholder-icon">📻</div>
+            <p>Sélectionnez une station pour commencer</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const state = {
+        sources: [],
+        currentSource: null,
+        eventSource: null,
+        messages: new Map(),
+      };
+
+      function formatTime(date) {
+        return date.toLocaleTimeString("fr-FR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
+
+      const sourcesContainer = document.getElementById("sources");
+      const messagesContainer = document.getElementById("messages-container");
+      const statusDot = document.getElementById("status-dot");
+      const statusText = document.getElementById("status-text");
+
+      function updateStatus(connected, text) {
+        statusDot.className = "status-dot" + (connected ? " connected" : "");
+        statusText.textContent = text;
+      }
+
+      function renderSources() {
+        sourcesContainer.innerHTML = "";
+
+        state.sources.forEach((source) => {
+          const btn = document.createElement("button");
+          btn.className =
+            "source-btn" + (source.id === state.currentSource ? " active" : "");
+          btn.textContent = source.name;
+          btn.onclick = () => setSource(source.id);
+          sourcesContainer.appendChild(btn);
+        });
+
+        if (state.currentSource) {
+          const stopBtn = document.createElement("button");
+          stopBtn.className = "source-btn stop";
+          stopBtn.textContent = "Arrêter";
+          stopBtn.onclick = () => setSource(null);
+          sourcesContainer.appendChild(stopBtn);
+        }
+      }
+
+      function renderMessage(responseId) {
+        const data = state.messages.get(responseId);
+        if (!data) return;
+
+        let el = document.getElementById(`msg-${responseId}`);
+        if (!el) {
+          el = document.createElement("div");
+          el.id = `msg-${responseId}`;
+          el.className = "message";
+          el.innerHTML = '<div class="text"></div><div class="meta"></div>';
+
+          const placeholder = messagesContainer.querySelector(".placeholder");
+          if (placeholder) placeholder.remove();
+
+          messagesContainer.insertBefore(el, messagesContainer.firstChild);
+        }
+
+        el.querySelector(".text").textContent = data.text;
+
+        const sourceName = data.sourceName || "Source inconnue";
+        const timeInfo = data.complete
+          ? `Complété à ${formatTime(data.completedAt)}`
+          : "En cours...";
+        el.querySelector(".meta").textContent = `${sourceName} • ${timeInfo}`;
+
+        el.className = "message" + (data.complete ? " complete" : "");
+      }
+
+      function showError(message) {
+        const el = document.createElement("div");
+        el.className = "message error";
+        el.innerHTML = `<div class="text">${message}</div>`;
+
+        const placeholder = messagesContainer.querySelector(".placeholder");
+        if (placeholder) placeholder.remove();
+
+        messagesContainer.insertBefore(el, messagesContainer.firstChild);
+      }
+
+      async function fetchSources() {
+        try {
+          const res = await fetch("/sources");
+          const data = await res.json();
+          state.sources = data.sources;
+          state.currentSource = data.current;
+          renderSources();
+
+          if (state.currentSource) {
+            updateStatus(
+              false,
+              `${state.sources.find((s) => s.id === state.currentSource)?.name || state.currentSource} - Connexion...`
+            );
+            connectStream();
+          } else {
+            updateStatus(false, "Aucune station sélectionnée");
+          }
+        } catch (err) {
+          updateStatus(false, "Erreur de chargement");
+          sourcesContainer.innerHTML =
+            '<p style="color: #ff6b6b">Erreur de chargement des sources</p>';
+        }
+      }
+
+      async function setSource(sourceId) {
+        try {
+          disconnectStream();
+
+          const res = await fetch("/sources", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: sourceId }),
+          });
+
+          const data = await res.json();
+          state.currentSource = data.current;
+          renderSources();
+
+          if (state.currentSource) {
+            updateStatus(false, `${data.name} - Connexion...`);
+            connectStream();
+          } else {
+            updateStatus(false, "Aucune station sélectionnée");
+          }
+        } catch (err) {
+          updateStatus(false, "Erreur");
+          showError("Erreur lors du changement de source");
+        }
+      }
+
+      function connectStream() {
+        if (state.eventSource) {
+          state.eventSource.close();
+        }
+
+        state.eventSource = new EventSource("/stream");
+
+        state.eventSource.onopen = () => {
+          const sourceName =
+            state.sources.find((s) => s.id === state.currentSource)?.name ||
+            state.currentSource;
+          updateStatus(true, `${sourceName} - Connecté`);
+        };
+
+        state.eventSource.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === "delta") {
+              const existing = state.messages.get(msg.responseId) || {
+                text: "",
+                complete: false,
+                sourceName:
+                  state.sources.find((s) => s.id === state.currentSource)
+                    ?.name || state.currentSource,
+              };
+              existing.text += msg.text;
+              state.messages.set(msg.responseId, existing);
+              renderMessage(msg.responseId);
+            } else if (msg.type === "complete") {
+              const existing = state.messages.get(msg.responseId);
+              if (existing) {
+                existing.complete = true;
+                existing.completedAt = new Date();
+                state.messages.set(msg.responseId, existing);
+                renderMessage(msg.responseId);
+              }
+            } else if (msg.type === "error") {
+              showError(msg.message);
+            }
+          } catch (err) {
+            console.error("Failed to parse message:", err);
+          }
+        };
+
+        state.eventSource.onerror = () => {
+          updateStatus(false, "Connexion perdue - Reconnexion...");
+          statusDot.classList.add("error");
+        };
+      }
+
+      function disconnectStream() {
+        if (state.eventSource) {
+          state.eventSource.close();
+          state.eventSource = null;
+        }
+      }
+
+      fetchSources();
+    </script>
+  </body>
+</html>
