@@ -20,6 +20,11 @@ type OpenAIRealtime struct {
 	broadcaster *Broadcaster
 	writeMu     sync.Mutex
 	done        chan struct{}
+
+	// Response timing tracking
+	timingMu        sync.Mutex
+	lastRequestedAt time.Time            // when RequestResponse() was last called
+	firstDeltaAt    map[string]time.Time // responseId → time of first delta
 }
 
 // NewOpenAIRealtime connects to the OpenAI Realtime API with retry logic and
@@ -80,9 +85,10 @@ func NewOpenAIRealtime(ctx context.Context, apiKey string, broadcaster *Broadcas
 	log.Println("Connected to OpenAI Realtime API")
 
 	rt := &OpenAIRealtime{
-		conn:        conn,
-		broadcaster: broadcaster,
-		done:        make(chan struct{}),
+		conn:         conn,
+		broadcaster:  broadcaster,
+		done:         make(chan struct{}),
+		firstDeltaAt: make(map[string]time.Time),
 	}
 
 	// Start read loop
@@ -113,6 +119,7 @@ func (rt *OpenAIRealtime) readLoop() {
 
 		switch event.Type {
 		case "response.output_text.delta":
+			rt.trackFirstDelta(event.ResponseID)
 			rt.broadcaster.Publish(BroadcastMessage{
 				Type:       "delta",
 				ResponseID: event.ResponseID,
@@ -120,6 +127,7 @@ func (rt *OpenAIRealtime) readLoop() {
 			})
 		case "response.done":
 			if event.Response != nil {
+				rt.trackResponseDone(event.Response.ID)
 				rt.broadcaster.Publish(BroadcastMessage{
 					Type:       "complete",
 					ResponseID: event.Response.ID,
@@ -157,9 +165,40 @@ func (rt *OpenAIRealtime) CommitBuffer() error {
 }
 
 func (rt *OpenAIRealtime) RequestResponse() error {
+	rt.timingMu.Lock()
+	rt.lastRequestedAt = time.Now()
+	rt.timingMu.Unlock()
 	return rt.send(map[string]string{
 		"type": "response.create",
 	})
+}
+
+func (rt *OpenAIRealtime) trackFirstDelta(responseID string) {
+	rt.timingMu.Lock()
+	defer rt.timingMu.Unlock()
+
+	if _, seen := rt.firstDeltaAt[responseID]; seen {
+		return
+	}
+
+	now := time.Now()
+	rt.firstDeltaAt[responseID] = now
+
+	if !rt.lastRequestedAt.IsZero() {
+		latency := now.Sub(rt.lastRequestedAt)
+		log.Printf("[KPI] response_latency: %dms (response %s)", latency.Milliseconds(), responseID)
+	}
+}
+
+func (rt *OpenAIRealtime) trackResponseDone(responseID string) {
+	rt.timingMu.Lock()
+	defer rt.timingMu.Unlock()
+
+	if start, ok := rt.firstDeltaAt[responseID]; ok {
+		totalTime := time.Since(start)
+		log.Printf("[KPI] response_total_time: %dms (response %s)", totalTime.Milliseconds(), responseID)
+		delete(rt.firstDeltaAt, responseID)
+	}
 }
 
 func (rt *OpenAIRealtime) Subscribe() (<-chan BroadcastMessage, func()) {
