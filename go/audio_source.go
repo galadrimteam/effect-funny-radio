@@ -48,7 +48,7 @@ func AudioSourceIDs() []AudioSourceID {
 
 const (
 	BytesPerSecond = 24000 * 2 // 24kHz, 16-bit mono
-	BatchThreshold = BytesPerSecond / 50
+	BatchThreshold = BytesPerSecond / 10 // 4800 bytes (~0.1s of audio)
 )
 
 // AudioSource manages the currently selected radio source and provides

@@ -145,32 +145,37 @@ func (rt *OpenAIRealtime) readLoop() {
 	}
 }
 
-func (rt *OpenAIRealtime) send(msg any) error {
+func (rt *OpenAIRealtime) sendRaw(data []byte) error {
 	rt.writeMu.Lock()
 	defer rt.writeMu.Unlock()
-	return rt.conn.WriteJSON(msg)
+	return rt.conn.WriteMessage(websocket.TextMessage, data)
 }
 
+// Pre-serialized JSON fragments to avoid map allocation + json.Marshal per chunk.
+var (
+	appendAudioPrefix = []byte(`{"type":"input_audio_buffer.append","audio":"`)
+	appendAudioSuffix = []byte(`"}`)
+	commitBufferMsg   = []byte(`{"type":"input_audio_buffer.commit"}`)
+	responseCreateMsg = []byte(`{"type":"response.create"}`)
+)
+
 func (rt *OpenAIRealtime) AppendAudio(base64Audio string) error {
-	return rt.send(map[string]string{
-		"type":  "input_audio_buffer.append",
-		"audio": base64Audio,
-	})
+	buf := make([]byte, 0, len(appendAudioPrefix)+len(base64Audio)+len(appendAudioSuffix))
+	buf = append(buf, appendAudioPrefix...)
+	buf = append(buf, base64Audio...)
+	buf = append(buf, appendAudioSuffix...)
+	return rt.sendRaw(buf)
 }
 
 func (rt *OpenAIRealtime) CommitBuffer() error {
-	return rt.send(map[string]string{
-		"type": "input_audio_buffer.commit",
-	})
+	return rt.sendRaw(commitBufferMsg)
 }
 
 func (rt *OpenAIRealtime) RequestResponse() error {
 	rt.timingMu.Lock()
 	rt.lastRequestedAt = time.Now()
 	rt.timingMu.Unlock()
-	return rt.send(map[string]string{
-		"type": "response.create",
-	})
+	return rt.sendRaw(responseCreateMsg)
 }
 
 func (rt *OpenAIRealtime) trackFirstDelta(responseID string) {

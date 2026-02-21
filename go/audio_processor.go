@@ -105,8 +105,10 @@ func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSource
 		sinceCommit += len(chunk)
 		chunkCount++
 
-		// Periodic commit (every 3 seconds of audio)
-		if sinceCommit >= CommitBytes && accumulated < TargetBytes {
+		// Steady commit cadence (every 3 seconds of audio), independent of
+		// response request timing. This ensures audio reaches OpenAI promptly
+		// and the pipeline stays saturated during response generation.
+		if sinceCommit >= CommitBytes {
 			if err := ap.openai.CommitBuffer(); err != nil {
 				return fmt.Errorf("failed to commit buffer: %w", err)
 			}
@@ -124,14 +126,18 @@ func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSource
 				log.Printf("[KPI] chunk_throughput: %.1f chunks/s, %.0f bytes/s (%.1fx realtime)",
 					chunksPerSec, bytesPerSec, bytesPerSec/float64(BytesPerSecond))
 			}
-			if err := ap.openai.CommitBuffer(); err != nil {
-				return fmt.Errorf("failed to commit buffer: %w", err)
+			// Commit any audio accumulated since the last periodic commit
+			if sinceCommit > 0 {
+				if err := ap.openai.CommitBuffer(); err != nil {
+					return fmt.Errorf("failed to commit buffer: %w", err)
+				}
+				sinceCommit = 0
 			}
 			if err := ap.openai.RequestResponse(); err != nil {
 				return fmt.Errorf("failed to request response: %w", err)
 			}
+			// Reset response window — audio keeps flowing without interruption
 			accumulated = 0
-			sinceCommit = 0
 			chunkCount = 0
 			throughputStart = time.Now()
 		}
