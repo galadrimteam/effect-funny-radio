@@ -114,7 +114,7 @@ func (a *AudioSource) Stream(ctx context.Context) (<-chan []byte, error) {
 		return nil, err
 	}
 
-	ch := make(chan []byte, 32)
+	ch := make(chan []byte, 128)
 
 	go func() {
 		defer close(ch)
@@ -123,7 +123,7 @@ func (a *AudioSource) Stream(ctx context.Context) (<-chan []byte, error) {
 			_ = cmd.Wait()
 		}()
 
-		buf := make([]byte, 4096)
+		buf := make([]byte, 32768)
 		var acc bytes.Buffer
 
 		for {

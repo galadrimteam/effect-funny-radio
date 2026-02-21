@@ -87,19 +87,27 @@ func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSource
 	chunkCount := 0
 	throughputStart := time.Now()
 
+	// Reusable base64 encode buffer — avoids allocation per chunk.
+	// BatchThreshold (4800) encodes to exactly 6400 base64 chars.
+	b64Buf := make([]byte, base64.StdEncoding.EncodedLen(BatchThreshold))
+
 	for chunk := range audioCh {
-		// Check that the source hasn't changed
-		current := ap.source.CurrentSource()
-		if current == nil || *current != sourceID {
-			log.Println("Source cleared, stopping audio processing")
-			return nil
+		// Throttled source check — every 10 chunks (~1/s) instead of every chunk
+		if chunkCount%10 == 0 {
+			current := ap.source.CurrentSource()
+			if current == nil || *current != sourceID {
+				log.Println("Source cleared, stopping audio processing")
+				return nil
+			}
 		}
 
-		// Encode and send to OpenAI
-		b64 := base64.StdEncoding.EncodeToString(chunk)
-		if err := ap.openai.AppendAudio(b64); err != nil {
-			return fmt.Errorf("failed to append audio: %w", err)
+		// Encode to base64 using reusable buffer and send to OpenAI
+		n := base64.StdEncoding.EncodedLen(len(chunk))
+		if n > len(b64Buf) {
+			b64Buf = make([]byte, n)
 		}
+		base64.StdEncoding.Encode(b64Buf[:n], chunk)
+		ap.openai.AppendAudio(string(b64Buf[:n]))
 
 		accumulated += len(chunk)
 		sinceCommit += len(chunk)
@@ -109,9 +117,7 @@ func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSource
 		// response request timing. This ensures audio reaches OpenAI promptly
 		// and the pipeline stays saturated during response generation.
 		if sinceCommit >= CommitBytes {
-			if err := ap.openai.CommitBuffer(); err != nil {
-				return fmt.Errorf("failed to commit buffer: %w", err)
-			}
+			ap.openai.CommitBuffer()
 			sinceCommit = 0
 		}
 
@@ -128,14 +134,10 @@ func (ap *AudioProcessor) processAudio(ctx context.Context, sourceID AudioSource
 			}
 			// Commit any audio accumulated since the last periodic commit
 			if sinceCommit > 0 {
-				if err := ap.openai.CommitBuffer(); err != nil {
-					return fmt.Errorf("failed to commit buffer: %w", err)
-				}
+				ap.openai.CommitBuffer()
 				sinceCommit = 0
 			}
-			if err := ap.openai.RequestResponse(); err != nil {
-				return fmt.Errorf("failed to request response: %w", err)
-			}
+			ap.openai.RequestResponse()
 			// Reset response window — audio keeps flowing without interruption
 			accumulated = 0
 			chunkCount = 0

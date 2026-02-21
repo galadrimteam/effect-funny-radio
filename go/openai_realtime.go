@@ -18,8 +18,9 @@ const openaiURL = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini"
 type OpenAIRealtime struct {
 	conn        *websocket.Conn
 	broadcaster *Broadcaster
-	writeMu     sync.Mutex
+	writeCh     chan []byte // async write queue — decouples processor from socket I/O
 	done        chan struct{}
+	writeDone   chan struct{}
 
 	// Response timing tracking
 	timingMu        sync.Mutex
@@ -87,12 +88,15 @@ func NewOpenAIRealtime(ctx context.Context, apiKey string, broadcaster *Broadcas
 	rt := &OpenAIRealtime{
 		conn:         conn,
 		broadcaster:  broadcaster,
+		writeCh:      make(chan []byte, 256),
 		done:         make(chan struct{}),
+		writeDone:    make(chan struct{}),
 		firstDeltaAt: make(map[string]time.Time),
 	}
 
-	// Start read loop
+	// Start read and write loops
 	go rt.readLoop()
+	go rt.writeLoop()
 
 	return rt, nil
 }
@@ -145,10 +149,16 @@ func (rt *OpenAIRealtime) readLoop() {
 	}
 }
 
-func (rt *OpenAIRealtime) sendRaw(data []byte) error {
-	rt.writeMu.Lock()
-	defer rt.writeMu.Unlock()
-	return rt.conn.WriteMessage(websocket.TextMessage, data)
+// writeLoop drains the write channel and sends messages to the WebSocket.
+// This decouples the audio processor from socket I/O latency.
+func (rt *OpenAIRealtime) writeLoop() {
+	defer close(rt.writeDone)
+	for msg := range rt.writeCh {
+		if err := rt.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+			log.Printf("OpenAI WebSocket write error: %v", err)
+			return
+		}
+	}
 }
 
 // Pre-serialized JSON fragments to avoid map allocation + json.Marshal per chunk.
@@ -159,23 +169,35 @@ var (
 	responseCreateMsg = []byte(`{"type":"response.create"}`)
 )
 
-func (rt *OpenAIRealtime) AppendAudio(base64Audio string) error {
-	buf := make([]byte, 0, len(appendAudioPrefix)+len(base64Audio)+len(appendAudioSuffix))
-	buf = append(buf, appendAudioPrefix...)
-	buf = append(buf, base64Audio...)
-	buf = append(buf, appendAudioSuffix...)
-	return rt.sendRaw(buf)
+// appendBuf is reused across AppendAudio calls to avoid allocations.
+// Safe because only the audio processor goroutine calls AppendAudio.
+var appendBuf []byte
+
+func (rt *OpenAIRealtime) AppendAudio(base64Audio string) {
+	needed := len(appendAudioPrefix) + len(base64Audio) + len(appendAudioSuffix)
+	if cap(appendBuf) < needed {
+		appendBuf = make([]byte, 0, needed*2)
+	}
+	appendBuf = appendBuf[:0]
+	appendBuf = append(appendBuf, appendAudioPrefix...)
+	appendBuf = append(appendBuf, base64Audio...)
+	appendBuf = append(appendBuf, appendAudioSuffix...)
+
+	// Copy into a new slice for the channel since appendBuf is reused
+	msg := make([]byte, len(appendBuf))
+	copy(msg, appendBuf)
+	rt.writeCh <- msg
 }
 
-func (rt *OpenAIRealtime) CommitBuffer() error {
-	return rt.sendRaw(commitBufferMsg)
+func (rt *OpenAIRealtime) CommitBuffer() {
+	rt.writeCh <- commitBufferMsg
 }
 
-func (rt *OpenAIRealtime) RequestResponse() error {
+func (rt *OpenAIRealtime) RequestResponse() {
 	rt.timingMu.Lock()
 	rt.lastRequestedAt = time.Now()
 	rt.timingMu.Unlock()
-	return rt.sendRaw(responseCreateMsg)
+	rt.writeCh <- responseCreateMsg
 }
 
 func (rt *OpenAIRealtime) trackFirstDelta(responseID string) {
@@ -211,6 +233,8 @@ func (rt *OpenAIRealtime) Subscribe() (<-chan BroadcastMessage, func()) {
 }
 
 func (rt *OpenAIRealtime) Close() {
+	close(rt.writeCh)    // signal write loop to stop
+	<-rt.writeDone       // wait for pending writes to flush
 	rt.conn.Close()
-	<-rt.done // wait for read loop to finish
+	<-rt.done            // wait for read loop to finish
 }
